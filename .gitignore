@@ -1,0 +1,8 @@
+# never track credentials or machine state
+.env
+*.env
+.credentials.json
+auth.json
+*.p8
+*.pem
+settings.local.json

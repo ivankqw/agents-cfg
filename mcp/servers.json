@@ -1,0 +1,8 @@
+{
+  "_comment": "No secrets. Keys are read from the named environment variable at install time.",
+  "servers": [
+    {"name": "context7", "url": "https://mcp.context7.com/mcp", "header_name": "CONTEXT7_API_KEY", "header_env": "CONTEXT7_API_KEY"},
+    {"name": "exa", "url": "https://mcp.exa.ai/mcp"},
+    {"name": "linear-server", "url": "https://mcp.linear.app/mcp"}
+  ]
+}
