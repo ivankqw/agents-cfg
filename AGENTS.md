@@ -1,58 +1,55 @@
-# agents-cfg — point your agent here
+# agents-cfg
 
-This repository is a portable agent configuration for **Claude Code** and **Codex**. It carries
-working conventions, a small set of hand-written skills, an adversarial code-review agent, an
-advisory pre-push hook, and a review-routing script.
+My agent setup for Claude Code and Codex: working conventions, a few skills I wrote, an adversarial
+code reviewer, an advisory pre-push hook, and a script that routes review work.
 
-If you are an agent and someone pointed you at this repository, your job is to install it on this
-machine. Read this file, then run the steps in **Bootstrap**.
+If someone pointed you at this repo, install it on this machine. Read this file, then run the steps
+under **Bootstrap**.
 
-## What installing does
+## What the install does
 
-`install.sh` creates symlinks. It copies nothing into place, so an update to this repo takes effect
-at once.
+`install.sh` creates symlinks and copies nothing, so an edit to this repo takes effect at once.
 
 | It writes | Purpose |
 |---|---|
 | `~/.claude/skills/*` | links to skills, both from here and from `~/.agents/skills` |
 | `~/.claude/agents/*` | links to `agents/` |
 | `~/.claude/hooks/*` | links to `hooks/` |
-| `~/.local/bin/*` | links to `bin/`, so `delegate` is on the PATH |
+| `~/.local/bin/*` | links to `bin/`, putting `delegate` on the PATH |
+| `~/skills-lock.json` | link to the lockfile, where the `skills` CLI looks for it |
 | `~/.claude/CLAUDE.md` | one `@import` per layer, so Claude Code loads the conventions |
 | `~/AGENTS.md` | the same conventions concatenated, because Codex reads `AGENTS.md` |
 | `~/.codex/AGENTS.md` | link to `~/AGENTS.md` |
 
-It never writes a credential. It never touches `~/.claude/settings.json` — merge
+It writes no credential, and it leaves `~/.claude/settings.json` alone. Merge
 `settings/settings.template.json` by hand.
 
 ## Prerequisites
 
-- Linux or macOS. `install.sh` refuses any other system.
-- `git`, `python3`, and `bash`. macOS bash 3.2 is enough.
+- Linux or macOS. `install.sh` refuses anything else.
+- `git`, `python3`, `bash`. The bash 3.2 that ships with macOS is enough.
 - `node` with `npx`, for third-party skills.
 
 ## Bootstrap
 
-Run these four steps in order.
-
 ```bash
 git clone git@github.com:ivankqw/agents-cfg.git ~/agents-cfg
-~/agents-cfg/install.sh                 # links, and puts skills-lock.json at ~/
-cd ~ && npx skills experimental_install # restores third-party skills at their pinned versions
+~/agents-cfg/install.sh                 # links, and places ~/skills-lock.json
+cd ~ && npx skills experimental_install # restores third-party skills at their recorded commits
 ```
 
-The order matters: `install.sh` places `~/skills-lock.json`, and the `skills` command reads that
-file from the directory you run it in. Run it from `~` so the skills land in `~/.agents/skills`.
+Order matters. `install.sh` places `~/skills-lock.json`, and the `skills` CLI reads that file from
+whatever directory you run it in. Run it from `~` so the skills land in `~/.agents/skills`.
 
-Make sure `~/.local/bin` is on your PATH. Add this line to your shell profile if it is absent:
+Put `~/.local/bin` on your PATH if it is not there:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-## Verify the install
+## Check the install
 
-Conventions that do not load are the most common failure, and it is silent. Check for them:
+Conventions that fail to load are the most common problem, and nothing announces it. Test for that:
 
 ```bash
 cd /tmp && claude -p "Do not use tools. If your instructions contain 'A virtue cannot be graded',
@@ -64,47 +61,46 @@ write LOADED, else write MISSING."
 ## Update
 
 ```bash
-cd ~/agents-cfg && git pull     # conventions and own skills take effect at once
-npx skills update               # refresh third-party skills to their latest versions
+cd ~/agents-cfg && git pull     # conventions and my own skills take effect at once
+npx skills update               # move third-party skills to their latest versions
 ```
 
-`npx skills update` refreshes the **installed** skills and rewrites the CLI's own global lockfile at
-`~/.agents/.skill-lock.json`. It does **not** touch this repo, so `skills-lock.json` here goes stale
-until you refresh it on purpose. Do that after an update you want to keep:
+`npx skills update` refreshes the installed skills and rewrites the CLI's own global lockfile at
+`~/.agents/.skill-lock.json`. It does not touch this repo, so `skills-lock.json` here goes stale
+without telling you. Refresh it when you want to keep an update:
 
 ```bash
 cd ~/agents-cfg
-python3 - <<'EOF'
+python3 - <<'PY'
 import json, pathlib
 src = json.load(open(pathlib.Path.home() / ".agents/.skill-lock.json"))
 src["skills"] = {k: v for k, v in src["skills"].items() if "larksuite" not in v.get("sourceUrl", "")}
 pathlib.Path("skills-lock.json").write_text(json.dumps(src, indent=2) + "\n")
-EOF
-git diff skills-lock.json      # read the pin changes before keeping them
+PY
+git diff skills-lock.json      # read the pin changes before you keep them
 ```
 
-Drop the filter line if you want every installed skill in the lockfile. Keeping the two files in
-step is a deliberate act: the lockfile is what a new machine rebuilds from, so it should reflect the
-set you actually want, not everything that happens to be installed.
+Drop the filter line to record every installed skill. Keep the two files in step on purpose: a new
+machine rebuilds from this lockfile, so it should hold the set I want rather than whatever happens
+to be installed.
 
 ## Layout
 
 | Path | Holds |
 |---|---|
-| `conventions/AGENTS.md` | The portable conventions. This is the payload that gets linked. |
-| `skills/` | Skills written here. Third-party skills are declared, never vendored. |
+| `conventions/AGENTS.md` | The conventions. This is the payload the install links. |
+| `skills/` | Skills I wrote. Third-party skills are declared, never copied in. |
 | `agents/reviewer.md` | Independent adversarial reviewer. `model: opus`, `effort: max`. |
 | `hooks/` | Advisory `PreToolUse` hooks. They never block. |
 | `bin/delegate` | Routes review work to Codex while it has credit, else to the `reviewer` agent. |
-| `skills-lock.json` | Which third-party skills to install, and at which commit. Read by `npx skills`. |
+| `skills-lock.json` | Which third-party skills to install, and at which commit. |
 | `settings/settings.template.json` | A starting point. Merge by hand. |
 | `MACHINE-NOTES.md` | Per-machine setup. Not conventions. |
 
 ## The private layer
 
-`install.sh` layers a second repository on top if it exists, at `~/agents-cfg-private` or wherever
-`$PRIVATE_CONFIG` points. Employer-specific conventions, private skills and domain memory belong
-there, not here.
+`install.sh` layers a second repo on top when it finds one, at `~/agents-cfg-private` or wherever
+`$PRIVATE_CONFIG` points. Employer conventions, private skills and domain memory belong there.
 
-Nothing in this repository names an employer, a host, or a person. Keep it that way: if a line would
-stop being true at a different company, it belongs in the private layer.
+Keep this repo clean of all that. If a line would stop being true somewhere else, it belongs in the
+private layer.
