@@ -19,6 +19,15 @@ link() { # link <target> <linkname>
 }
 
 echo "== skills"
+# Third-party skills stay installer-managed in ~/.agents/skills so that
+# `npx skills update` keeps them fresh. We only link them into place — vendoring
+# them would freeze them at one commit and cut them off from upstream.
+if [ -d "$HOME/.agents/skills" ]; then
+  for d in "$HOME"/.agents/skills/*/; do link "${d%/}" "$CLAUDE_DIR/skills/$(basename "$d")"; done
+else
+  echo "  ! ~/.agents/skills is missing — run ./bootstrap-skills.sh first"
+fi
+# Repo-owned skills last, so they win on a name clash.
 for d in "$AC"/skills/*/; do link "${d%/}" "$CLAUDE_DIR/skills/$(basename "$d")"; done
 [ -d "$PRIVATE/skills" ] && for d in "$PRIVATE"/skills/*/; do link "${d%/}" "$CLAUDE_DIR/skills/$(basename "$d")"; done
 

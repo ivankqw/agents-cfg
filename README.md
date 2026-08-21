@@ -7,9 +7,19 @@ hostnames, no secrets. Clone this at a new machine or a new job and the workflow
 
 ```bash
 git clone <this repo> ~/agents-cfg
+~/agents-cfg/bootstrap-skills.sh   # fetches third-party skills into ~/.agents/skills
 export CONTEXT7_API_KEY=...        # optional; the MCP step skips servers whose key is unset
-~/agents-cfg/install.sh
+~/agents-cfg/install.sh            # links everything into ~/.claude
 ```
+
+## Third-party skills are declared, not vendored
+
+Most skills come from upstream repos and are managed by `npx skills`, which keeps them in
+`~/.agents/skills` with a lockfile. This repo deliberately does **not** copy them in: a copy
+freezes them at one commit and stops `npx skills update` from reaching them. `install.sh` symlinks
+`~/.agents/skills/*` into `~/.claude/skills`, so updates flow through with no further work.
+
+Run `npx skills update` periodically. Only skills written here live in `skills/`.
 
 The script is idempotent. Re-run it after you add a skill or edit `mcp/servers.json`.
 
@@ -19,7 +29,9 @@ The script is idempotent. Re-run it after you add a skill or edit `mcp/servers.j
 |---|---|
 | `AGENTS.md` | The portable conventions. Both harnesses read this content. |
 | `CLAUDE.md` | One line: `@AGENTS.md`. |
-| `skills/` | Curated, employer-neutral skills. |
+| `skills/` | Skills written here. Third-party skills are **not** vendored — see below. |
+| `bootstrap-skills.sh` | Installs the third-party skills from upstream via `npx skills`. |
+| `skill-lock.reference.json` | Record of what was installed and at which commit. Reference, not consumed. |
 | `agents/reviewer.md` | Independent adversarial reviewer. `model: opus`, `effort: max`. |
 | `hooks/` | Advisory PreToolUse hooks. |
 | `bin/delegate` | Routes review work to Codex while it has credit, else to the `reviewer` agent. |
