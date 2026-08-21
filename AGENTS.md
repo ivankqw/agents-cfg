@@ -68,8 +68,24 @@ cd ~/agents-cfg && git pull     # conventions and own skills take effect at once
 npx skills update               # refresh third-party skills to their latest versions
 ```
 
-`skills-lock.json` pins versions for a reproducible restore; `npx skills update` moves them
-forward. After updating, commit the refreshed `~/skills-lock.json` back to this repo.
+`npx skills update` refreshes the **installed** skills and rewrites the CLI's own global lockfile at
+`~/.agents/.skill-lock.json`. It does **not** touch this repo, so `skills-lock.json` here goes stale
+until you refresh it on purpose. Do that after an update you want to keep:
+
+```bash
+cd ~/agents-cfg
+python3 - <<'EOF'
+import json, pathlib
+src = json.load(open(pathlib.Path.home() / ".agents/.skill-lock.json"))
+src["skills"] = {k: v for k, v in src["skills"].items() if "larksuite" not in v.get("sourceUrl", "")}
+pathlib.Path("skills-lock.json").write_text(json.dumps(src, indent=2) + "\n")
+EOF
+git diff skills-lock.json      # read the pin changes before keeping them
+```
+
+Drop the filter line if you want every installed skill in the lockfile. Keeping the two files in
+step is a deliberate act: the lockfile is what a new machine rebuilds from, so it should reflect the
+set you actually want, not everything that happens to be installed.
 
 ## Layout
 

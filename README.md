@@ -27,10 +27,15 @@ the install touches, and how to verify it worked.
 
 ## Design
 
-**Two layers.** This repo is the portable layer: no employer, host, or person is named anywhere in
-it. `install.sh` layers a private repo on top if one exists at `~/agents-cfg-private` (override with
-`$PRIVATE_CONFIG`). Employer conventions and domain memory live there. At a new job you clone only
-this one and the workflows are unchanged.
+**This is my personal agent setup, kept in one place.** A new laptop, or a new job, should be a
+clone away rather than a week of rebuilding from memory. What lives here is method: how I want an
+agent to verify a claim, when a change gets reviewed and by whom, how findings get written down.
+None of it names an employer, a host, or a person, so all of it travels.
+
+Anything that would stop being true at a different company lives in a second, private repo, which
+`install.sh` layers on top when it finds one — at `~/agents-cfg-private`, or wherever
+`$PRIVATE_CONFIG` points. Employer conventions, private skills and accumulated domain memory belong
+there. At a new job I clone this repo, skip the other one, and the way I work is unchanged.
 
 **One source, two harnesses.** Claude Code reads `CLAUDE.md` and expands `@imports`, so `install.sh`
 writes `~/.claude/CLAUDE.md` with one import per layer. Codex reads `AGENTS.md`, where import support
