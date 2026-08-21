@@ -27,10 +27,13 @@ echo "== skills"
 # Third-party skills stay installer-managed in ~/.agents/skills so that
 # `npx skills update` keeps them fresh. We only link them into place — vendoring
 # them would freeze them at one commit and cut them off from upstream.
+# The `skills` CLI reads skills-lock.json from the CURRENT directory and installs
+# into ./.agents/skills — so running it from $HOME targets ~/.agents/skills.
+link "$AC/skills-lock.json" "$HOME/skills-lock.json"
 if [ -d "$HOME/.agents/skills" ]; then
   for d in "$HOME"/.agents/skills/*/; do link "${d%/}" "$CLAUDE_DIR/skills/$(basename "$d")"; done
 else
-  echo "  ! ~/.agents/skills is missing — run ./bootstrap-skills.sh first"
+  echo "  ! ~/.agents/skills is missing — run:  cd ~ && npx skills experimental_install"
 fi
 # Repo-owned skills last, so they win on a name clash.
 for d in "$AC"/skills/*/; do link "${d%/}" "$CLAUDE_DIR/skills/$(basename "$d")"; done

@@ -37,10 +37,12 @@ Run these four steps in order.
 
 ```bash
 git clone git@github.com:ivankqw/agents-cfg.git ~/agents-cfg
-cd ~/agents-cfg
-./bootstrap-skills.sh          # fetch third-party skills into ~/.agents/skills
-./install.sh                   # link everything into ~/.claude, ~/.codex and ~/.local/bin
+~/agents-cfg/install.sh                 # links, and puts skills-lock.json at ~/
+cd ~ && npx skills experimental_install # restores third-party skills at their pinned versions
 ```
+
+The order matters: `install.sh` places `~/skills-lock.json`, and the `skills` command reads that
+file from the directory you run it in. Run it from `~` so the skills land in `~/.agents/skills`.
 
 Make sure `~/.local/bin` is on your PATH. Add this line to your shell profile if it is absent:
 
@@ -63,8 +65,11 @@ write LOADED, else write MISSING."
 
 ```bash
 cd ~/agents-cfg && git pull     # conventions and own skills take effect at once
-npx skills update               # refresh the third-party skills
+npx skills update               # refresh third-party skills to their latest versions
 ```
+
+`skills-lock.json` pins versions for a reproducible restore; `npx skills update` moves them
+forward. After updating, commit the refreshed `~/skills-lock.json` back to this repo.
 
 ## Layout
 
@@ -75,8 +80,7 @@ npx skills update               # refresh the third-party skills
 | `agents/reviewer.md` | Independent adversarial reviewer. `model: opus`, `effort: max`. |
 | `hooks/` | Advisory `PreToolUse` hooks. They never block. |
 | `bin/delegate` | Routes review work to Codex while it has credit, else to the `reviewer` agent. |
-| `bootstrap-skills.sh` | Installs third-party skills from upstream with `npx skills`. |
-| `skill-lock.reference.json` | Record of what was installed, and at which commit. |
+| `skills-lock.json` | Which third-party skills to install, and at which commit. Read by `npx skills`. |
 | `settings/settings.template.json` | A starting point. Merge by hand. |
 | `MACHINE-NOTES.md` | Per-machine setup. Not conventions. |
 

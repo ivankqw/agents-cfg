@@ -16,7 +16,8 @@ Or step by step:
 
 ```bash
 git clone git@github.com:ivankqw/agents-cfg.git ~/agents-cfg
-cd ~/agents-cfg && ./bootstrap-skills.sh && ./install.sh
+~/agents-cfg/install.sh
+cd ~ && npx skills experimental_install
 export PATH="$HOME/.local/bin:$PATH"   # add to your shell profile
 ```
 
@@ -39,8 +40,9 @@ editing conventions, or Codex reads a stale copy.
 **Third-party skills are declared, not vendored.** Most skills come from upstream repos managed by
 [`npx skills`](https://www.npmjs.com/package/skills), which keeps them in `~/.agents/skills` with a
 lockfile. Copying them in would freeze them at one commit and stop `npx skills update` from reaching
-them, so `bootstrap-skills.sh` installs them from upstream and `install.sh` links them into place.
-Only skills written here live in `skills/`.
+them. Instead this repo carries `skills-lock.json`, and the CLI's own
+`npx skills experimental_install` restores every skill at its pinned commit. `install.sh` links them
+into `~/.claude/skills`. Only skills written here live in `skills/`.
 
 **Nothing secret.** No credential is stored or written. MCP servers are declared by name and URL in
 `mcp/servers.json`; keys are read from the environment at install time, and a server whose key is

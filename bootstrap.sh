@@ -12,8 +12,14 @@ for c in git python3; do command -v "$c" >/dev/null || { echo "missing prerequis
 if [ -d "$DEST/.git" ]; then echo "== updating $DEST"; git -C "$DEST" pull --ff-only
 else echo "== cloning into $DEST"; git clone --depth 1 "$REPO" "$DEST"; fi
 
-if command -v npx >/dev/null; then "$DEST/bootstrap-skills.sh"
-else echo "!! node/npx not found — skipping third-party skills; run ./bootstrap-skills.sh later"; fi
+if command -v npx >/dev/null; then
+  echo "== restoring third-party skills from the lockfile"
+  ln -sfn "$DEST/skills-lock.json" "$HOME/skills-lock.json"
+  ( cd "$HOME" && npx --yes skills@latest experimental_install )
+else
+  echo "!! node/npx not found — skipping third-party skills. Later run:"
+  echo "   cd ~ && npx skills experimental_install"
+fi
 
 "$DEST/install.sh"
 
