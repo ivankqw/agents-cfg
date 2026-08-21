@@ -1,89 +1,90 @@
-# Working conventions (portable)
+# agents-cfg — point your agent here
 
-Method only. Nothing here names an employer, a repo, or a hostname — if a line
-would stop being true at a different company, it belongs in the private layer.
+This repository is a portable agent configuration for **Claude Code** and **Codex**. It carries
+working conventions, a small set of hand-written skills, an adversarial code-review agent, an
+advisory pre-push hook, and a review-routing script.
 
-## Verification
+If you are an agent and someone pointed you at this repository, your job is to install it on this
+machine. Read this file, then run the steps in **Bootstrap**.
 
-- Never state a number, metric, row count, or behaviour as fact unless you measured it yourself in
-  this session. Say where it came from.
-- A figure reported by a subagent is **unverified** until you re-measure it. Subagents are for
-  exploration and critique; numbers you will act on get re-derived by you.
-- Tag every number in a claim: `[measured: <command> → <output>]`, `[sourced: <doc>]`, `[estimate]`,
-  or `[unverified]`. A virtue cannot be graded; a tag can be checked.
-- Measure the thing, not its shadow. Never infer success from the absence of an error string, and
-  never read an exit code through a pipe — `cmd | tail` reports `tail`'s status, not `cmd`'s.
-- Commit messages and PR descriptions may only assert properties you empirically tested. "Unverified,
-  and here is what I could not prove" is an acceptable and useful result.
+## What installing does
 
-## Before claiming work is complete
+`install.sh` creates symlinks. It copies nothing into place, so an update to this repo takes effect
+at once.
 
-- Re-read your own full diff line by line. List every behaviour you removed, tightened, or made
-  stricter — regressions in rewrites are the most common defect, not new logic.
-- Name every downstream caller of each changed interface, **including callers outside this repo**
-  (internal apps, pipelines, dashboards, MCP consumers). A change that is correct in-repo can still
-  break a caller you never looked at.
-- Run the tests and paste the real output. Then summarise.
+| It writes | Purpose |
+|---|---|
+| `~/.claude/skills/*` | links to skills, both from here and from `~/.agents/skills` |
+| `~/.claude/agents/*` | links to `agents/` |
+| `~/.claude/hooks/*` | links to `hooks/` |
+| `~/.local/bin/*` | links to `bin/`, so `delegate` is on the PATH |
+| `~/.claude/CLAUDE.md` | one `@import` per layer, so Claude Code loads the conventions |
+| `~/AGENTS.md` | the same conventions concatenated, because Codex reads `AGENTS.md` |
+| `~/.codex/AGENTS.md` | link to `~/AGENTS.md` |
 
-## Scope discipline
+It never writes a credential. It never touches `~/.claude/settings.json` — merge
+`settings/settings.template.json` by hand.
 
-- When asked to investigate or diagnose, deliver the diagnosis — and an issue or ADR when the fix
-  belongs to another implementer. Do not start implementing until the user approves.
-- Do not gate requested work behind an audit or prerequisite you invented. Ask first.
+## Prerequisites
 
-## Review before pushing
+- Linux or macOS. `install.sh` refuses any other system.
+- `git`, `python3`, and `bash`. macOS bash 3.2 is enough.
+- `node` with `npx`, for third-party skills.
 
-Two lanes on the same fixed point. They overlap almost nowhere, so run both; neither substitutes
-for the other.
+## Bootstrap
 
-- **Defects and test quality** — `delegate review <base-ref>`. Validates the ref and pins
-  `<base-ref>...HEAD` (three-dot, against the merge-base) before spending anything. Dispatch the
-  `reviewer` agent FRESH, never a fork — inheriting the author's context inherits the author's blind
-  spots. Never tell it to skip what you already verified; that is exactly where a shared blind spot
-  hides. Require it to RUN the tests and cite command plus output for anything it calls verified.
-  A clean pass with cited evidence is a valid result; never pad findings.
-- **Standards and spec conformance** — `/code-review` since the same fixed point. Catches the class
-  the defect lane is blind to: code that is correct but implements the wrong thing.
+Run these four steps in order.
 
-## Validation
+```bash
+git clone git@github.com:ivankqw/agents-cfg.git ~/agents-cfg
+cd ~/agents-cfg
+./bootstrap-skills.sh          # fetch third-party skills into ~/.agents/skills
+./install.sh                   # link everything into ~/.claude, ~/.codex and ~/.local/bin
+```
 
-- Run the cheapest check that actually exercises the change before declaring work done; report
-  actual output, not assumptions.
-- At minimum run `git diff --check` and the project's own test command.
+Make sure `~/.local/bin` is on your PATH. Add this line to your shell profile if it is absent:
 
-## Issue tracker
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
 
-- The tracker is the planning source of truth; the forge is the review and merge surface.
-- Keep the issue id visible in the branch and the PR.
-- After every verified milestone, post a short status comment: what changed, what is proven, what is
-  still unverified, the next step, and the commands to resume. Do this without being asked — it is
-  what survives a context compaction.
+## Verify the install
 
-## Branches and PRs
+Conventions that do not load are the most common failure, and it is silent. Check for them:
 
-- Branch prefixes: `feat/`, `fix/`, `refactor/`, `docs/`, `chore/`. Never personal prefixes.
-- Before pushing: check `git status --short --branch`, keep commits focused, no temp files, rebase on
-  the default branch if drifted.
-- PR body sections: Description / User-facing or operational impact / What changed / Validation.
-- Use a temporary body file for markdown-heavy descriptions so backticks survive the shell; delete it
-  afterwards.
+```bash
+cd /tmp && claude -p "Do not use tools. If your instructions contain 'A virtue cannot be graded',
+write LOADED, else write MISSING."
+```
 
-## Library and API docs
+`MISSING` means `~/.claude/CLAUDE.md` did not import the conventions. Run `./install.sh` again.
 
-- Reach for **context7** first on any library, framework, SDK, CLI, or cloud-service question —
-  `resolve-library-id`, then `query-docs`. It indexes current documentation; web search surfaces blog
-  posts about older versions.
-- Fall back to web search when context7 has no entry, or the question is not documentation at all.
+## Update
 
-## Writing style (ASD-STE100 Simplified Technical English)
+```bash
+cd ~/agents-cfg && git pull     # conventions and own skills take effect at once
+npx skills update               # refresh the third-party skills
+```
 
-Applies to READMEs, docs, PR descriptions, issues and comments. Chat replies, commit messages and
-code comments keep normal style.
+## Layout
 
-- Use the active voice. Use the imperative for instructions.
-- One instruction per sentence. Instructions ≤20 words; descriptive sentences ≤25.
-- One term for one meaning throughout a document.
-- Simple verbs: "do", "make sure", "examine", "show" — not "perform", "ensure", "inspect", "surface".
-- No idioms, metaphors, or figurative language.
-- State a warning as condition + consequence, before the instruction it protects.
-- Vertical lists for sequences; tables for decisions.
+| Path | Holds |
+|---|---|
+| `conventions/AGENTS.md` | The portable conventions. This is the payload that gets linked. |
+| `skills/` | Skills written here. Third-party skills are declared, never vendored. |
+| `agents/reviewer.md` | Independent adversarial reviewer. `model: opus`, `effort: max`. |
+| `hooks/` | Advisory `PreToolUse` hooks. They never block. |
+| `bin/delegate` | Routes review work to Codex while it has credit, else to the `reviewer` agent. |
+| `bootstrap-skills.sh` | Installs third-party skills from upstream with `npx skills`. |
+| `skill-lock.reference.json` | Record of what was installed, and at which commit. |
+| `settings/settings.template.json` | A starting point. Merge by hand. |
+| `MACHINE-NOTES.md` | Per-machine setup. Not conventions. |
+
+## The private layer
+
+`install.sh` layers a second repository on top if it exists, at `~/agents-cfg-private` or wherever
+`$PRIVATE_CONFIG` points. Employer-specific conventions, private skills and domain memory belong
+there, not here.
+
+Nothing in this repository names an employer, a host, or a person. Keep it that way: if a line would
+stop being true at a different company, it belongs in the private layer.

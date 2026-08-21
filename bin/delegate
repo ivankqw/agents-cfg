@@ -22,7 +22,7 @@ TTL=$((24 * 60 * 60))          # cap cache lifetime; short so a mid-cycle raise 
 CAP_RE='spend cap'
 
 now()  { date +%s; }
-stamp(){ date -Iseconds; }
+stamp(){ date +%Y-%m-%dT%H:%M:%S%z; }  # portable: BSD date has no -Iseconds
 note() { printf '%s\n' "$*" >&2; }
 record(){ printf '%s path=%s reason=%s\n' "$(stamp)" "$1" "$2" >> "$LOG"; }
 

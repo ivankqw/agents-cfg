@@ -1,59 +1,55 @@
-# agent-config
+# agents-cfg
 
-Portable agent configuration for Claude Code and Codex. Method only — no employer names, no
-hostnames, no secrets. Clone this at a new machine or a new job and the workflows stay the same.
+Portable agent configuration for [Claude Code](https://code.claude.com) and
+[Codex](https://developers.openai.com/codex). Conventions, a few hand-written skills, an adversarial
+code-review agent, an advisory pre-push hook, and a review-routing script.
 
-## Install
+Works on Linux and macOS. Installs by symlink, so `git pull` takes effect immediately.
+
+## Quick start
 
 ```bash
-git clone <this repo> ~/agents-cfg
-~/agents-cfg/bootstrap-skills.sh   # fetches third-party skills into ~/.agents/skills
-export CONTEXT7_API_KEY=...        # optional; the MCP step skips servers whose key is unset
-~/agents-cfg/install.sh            # links everything into ~/.claude
+curl -fsSL https://raw.githubusercontent.com/ivankqw/agents-cfg/main/bootstrap.sh | bash
 ```
 
-## Third-party skills are declared, not vendored
+Or step by step:
 
-Most skills come from upstream repos and are managed by `npx skills`, which keeps them in
-`~/.agents/skills` with a lockfile. This repo deliberately does **not** copy them in: a copy
-freezes them at one commit and stops `npx skills update` from reaching them. `install.sh` symlinks
-`~/.agents/skills/*` into `~/.claude/skills`, so updates flow through with no further work.
+```bash
+git clone git@github.com:ivankqw/agents-cfg.git ~/agents-cfg
+cd ~/agents-cfg && ./bootstrap-skills.sh && ./install.sh
+export PATH="$HOME/.local/bin:$PATH"   # add to your shell profile
+```
 
-Run `npx skills update` periodically. Only skills written here live in `skills/`.
+**Pointing an agent at this repo?** Give it the URL and tell it to read
+[`AGENTS.md`](./AGENTS.md) — that file is written for an agent and carries the install steps, what
+the install touches, and how to verify it worked.
 
-The script is idempotent. Re-run it after you add a skill or edit `mcp/servers.json`.
+## Design
+
+**Two layers.** This repo is the portable layer: no employer, host, or person is named anywhere in
+it. `install.sh` layers a private repo on top if one exists at `~/agents-cfg-private` (override with
+`$PRIVATE_CONFIG`). Employer conventions and domain memory live there. At a new job you clone only
+this one and the workflows are unchanged.
+
+**One source, two harnesses.** Claude Code reads `CLAUDE.md` and expands `@imports`, so `install.sh`
+writes `~/.claude/CLAUDE.md` with one import per layer. Codex reads `AGENTS.md`, where import support
+is not guaranteed, so the layers are concatenated into `~/AGENTS.md`. Re-run `install.sh` after
+editing conventions, or Codex reads a stale copy.
+
+**Third-party skills are declared, not vendored.** Most skills come from upstream repos managed by
+[`npx skills`](https://www.npmjs.com/package/skills), which keeps them in `~/.agents/skills` with a
+lockfile. Copying them in would freeze them at one commit and stop `npx skills update` from reaching
+them, so `bootstrap-skills.sh` installs them from upstream and `install.sh` links them into place.
+Only skills written here live in `skills/`.
+
+**Nothing secret.** No credential is stored or written. MCP servers are declared by name and URL in
+`mcp/servers.json`; keys are read from the environment at install time, and a server whose key is
+unset is skipped.
 
 ## Layout
 
-| Path | Purpose |
-|---|---|
-| `AGENTS.md` | The portable conventions. Both harnesses read this content. |
-| `CLAUDE.md` | One line: `@AGENTS.md`. |
-| `skills/` | Skills written here. Third-party skills are **not** vendored — see below. |
-| `bootstrap-skills.sh` | Installs the third-party skills from upstream via `npx skills`. |
-| `skill-lock.reference.json` | Record of what was installed and at which commit. Reference, not consumed. |
-| `agents/reviewer.md` | Independent adversarial reviewer. `model: opus`, `effort: max`. |
-| `hooks/` | Advisory PreToolUse hooks. |
-| `bin/delegate` | Routes review work to Codex while it has credit, else to the `reviewer` agent. |
-| `settings/settings.template.json` | Starting point. Merge into `~/.claude/settings.json` by hand. |
-| `mcp/servers.json` | Server names and URLs. Keys come from the environment. |
-| `MACHINE-NOTES.md` | Per-machine setup that does not belong in conventions. |
+See the table in [`AGENTS.md`](./AGENTS.md).
 
-## How the two harnesses read one source
+## License
 
-Claude Code reads `CLAUDE.md` and expands `@imports`, so `install.sh` writes
-`~/.claude/CLAUDE.md` with one import per layer. Edits to `AGENTS.md` are live.
-
-Codex reads `AGENTS.md`. Import support is not guaranteed, so `install.sh` concatenates the layers
-into `~/AGENTS.md`. **Re-run `install.sh` after editing conventions**, or Codex reads a stale copy.
-
-## The private layer
-
-`install.sh` layers `~/agents-cfg-private` (override with `$PRIVATE_CONFIG`) on top if it exists:
-its skills, its `bin/`, and its `AGENTS.md`. At a new job, do not clone it. Everything here still
-works; only the employer specifics are absent.
-
-## Rule for what goes where
-
-Ask: would this sentence still be true at a different company? If yes it belongs here. If it names a
-repo, a remote, a warehouse, a tracker workspace, or a hostname, it belongs in the private layer.
+MIT — see [LICENSE](./LICENSE).
