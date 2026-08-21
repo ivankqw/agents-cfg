@@ -39,7 +39,7 @@ downstream callers named — including callers outside the repo.
 
 Run both. They overlap almost nowhere, so one passing says nothing about the other.
 
-- `~/work/delegate review <base-ref>` — defects and test quality. Exit 3 means Codex is
+- `delegate review <base-ref>` — defects and test quality. Exit 3 means Codex is
   capped: dispatch the `reviewer` agent as a fresh agent with the repo path and the diff
   command it prints.
 - `/code-review` since the same base — standards, and faithfulness to the spec.

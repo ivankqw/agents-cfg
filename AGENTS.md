@@ -36,7 +36,7 @@ would stop being true at a different company, it belongs in the private layer.
 Two lanes on the same fixed point. They overlap almost nowhere, so run both; neither substitutes
 for the other.
 
-- **Defects and test quality** — `bin/delegate review <base-ref>`. Validates the ref and pins
+- **Defects and test quality** — `delegate review <base-ref>`. Validates the ref and pins
   `<base-ref>...HEAD` (three-dot, against the merge-base) before spending anything. Dispatch the
   `reviewer` agent FRESH, never a fork — inheriting the author's context inherits the author's blind
   spots. Never tell it to skip what you already verified; that is exactly where a shared blind spot

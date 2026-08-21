@@ -6,9 +6,9 @@ hostnames, no secrets. Clone this at a new machine or a new job and the workflow
 ## Install
 
 ```bash
-git clone <this repo> ~/agent-config
+git clone <this repo> ~/agents-cfg
 export CONTEXT7_API_KEY=...        # optional; the MCP step skips servers whose key is unset
-~/agent-config/install.sh
+~/agents-cfg/install.sh
 ```
 
 The script is idempotent. Re-run it after you add a skill or edit `mcp/servers.json`.
@@ -37,7 +37,7 @@ into `~/AGENTS.md`. **Re-run `install.sh` after editing conventions**, or Codex 
 
 ## The private layer
 
-`install.sh` layers `~/sofina-config` (override with `$PRIVATE_CONFIG`) on top if it exists:
+`install.sh` layers `~/agents-cfg-private` (override with `$PRIVATE_CONFIG`) on top if it exists:
 its skills, its `bin/`, and its `AGENTS.md`. At a new job, do not clone it. Everything here still
 works; only the employer specifics are absent.
 

@@ -4,7 +4,7 @@
 Two nudges, never blocking:
 
 1. `git push` -> remind that an adversarial review belongs BEFORE the push.
-2. bare `codex ...` -> remind that Codex delegation goes through ~/work/delegate,
+2. bare `codex ...` -> remind that Codex delegation goes through delegate,
    which is the only path that knows about the spend cap and the fallback.
 
 Advisory by design. The main agent keeps judgement; the user's explicit
@@ -21,7 +21,7 @@ REVIEW = (
     "Review gate (advisory): this push ships work. Unless it is trivial "
     "(docs/typo/config), an adversarial review should run BEFORE the push — "
     "afterwards it becomes a follow-up PR.\n"
-    "Run `~/work/delegate review <base-ref>`. It tries Codex first and exits 3 "
+    "Run `delegate review <base-ref>`. It tries Codex first and exits 3 "
     "telling you to dispatch the `reviewer` agent when Codex is spend-capped.\n"
     "Dispatch `reviewer` as a FRESH agent, never a fork — inheriting this "
     "conversation's context inherits its blind spots. Give it the repo path, the "
@@ -31,7 +31,7 @@ REVIEW = (
 )
 
 CODEX = (
-    "Codex routing (advisory): call `~/work/delegate` instead of `codex` directly.\n"
+    "Codex routing (advisory): call `delegate` instead of `codex` directly.\n"
     "Codex reports a spend cap only on stderr and exits non-zero, so a bare call "
     "is easy to misread as success. `delegate` does the detection, caches a cap "
     "for 24h, logs which engine served each run, and falls back to the `reviewer` "

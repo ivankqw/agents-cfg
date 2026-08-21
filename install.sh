@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Install the agent config onto this machine. Idempotent — safe to re-run.
 #
-# Layers: this repo is the portable method layer. If ~/sofina-config (or
+# Layers: this repo is the portable method layer. If ~/agents-cfg-private (or
 # $PRIVATE_CONFIG) exists it is layered on top. At a new job, clone only this
 # repo and the workflows stay identical minus the employer specifics.
 set -euo pipefail
 
 AC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PRIVATE="${PRIVATE_CONFIG:-$HOME/sofina-config}"
+PRIVATE="${PRIVATE_CONFIG:-$HOME/agents-cfg-private}"
 CLAUDE_DIR="$HOME/.claude"
 BIN="$HOME/.local/bin"
 mkdir -p "$CLAUDE_DIR"/{skills,agents,hooks} "$BIN"
