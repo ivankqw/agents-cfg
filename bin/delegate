@@ -48,7 +48,7 @@ fallback() {   # $1 = reason class, $2 = task description for the reviewer
   record claude "$1"
   note ""
   note "Codex unavailable ($1). Do NOT retry Codex."
-  note "Dispatch the \`reviewer\` agent (fresh, never a fork) on: $2"
+  note "Dispatch the reviewer as a NEW agent with no memory of this session on: $2"
   note "Give it the repo path, the command that shows the diff, and what the change claims to do."
   exit 3
 }

@@ -4,8 +4,8 @@
 and those are usually what a project needs to run: `.env`, credentials, local config, keys. A bare
 worktree therefore looks correct and fails on the first command that needs one of them.
 
-A helper closes that gap. Build one per project rather than reaching for a generic script, because
-only the project knows which untracked files matter.
+A helper closes that gap. Drive it from a manifest so one helper serves every project you touch,
+rather than writing a bespoke script per repo: the logic is identical, only the file list differs.
 
 ## What it has to do
 
@@ -46,7 +46,8 @@ versions and you will not notice which one is current.
 - **Report what it copied**, by name. A count tells you nothing when one file is missing.
 - **Fail loudly when a source is absent.** A worktree created without its secrets looks fine until
   the first real command.
-- **Never commit the manifest's contents.** The manifest lists paths. The files stay untracked.
+- **Never commit the files the manifest points at.** The manifest itself is ordinary config and
+  belongs in git; the files it names stay untracked.
 
 ## Check it works
 

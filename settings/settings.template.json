@@ -14,7 +14,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/hooks/codex_review_reminder.py"
+            "command": "python3 ~/.claude/hooks/review_reminder.py"
           }
         ]
       }

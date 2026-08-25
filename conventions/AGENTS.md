@@ -69,12 +69,17 @@ other.
 
 - **Defects and test quality.** `delegate review <base-ref>` validates the ref and pins
   `<base-ref>...HEAD` against the merge-base before it spends anything. Dispatch the `reviewer`
-  agent fresh, never as a fork: a fork inherits the author's context and the author's blind spots.
+  reviewer as a new agent that starts with no memory of this conversation. A mechanism that shares
+  this session's context inherits the author's blind spots along with it. In Claude Code that means
+  never dispatching it as a fork.
   Never tell it to skip what you already verified, because that is where a shared blind spot hides.
   Require it to run the tests and cite command plus output for anything it calls verified. A clean
   pass with cited evidence is a real result. Padding the findings is not.
-- **Standards and spec conformance.** `/code-review` since the same fixed point. It catches what the
-  defect lane cannot see: code that works and implements the wrong thing.
+- **Standards and spec conformance.** A second pass over the same fixed point: does the diff follow
+  this repo's documented standards, and does it do what the originating issue asked. Use the
+  harness's standards-and-spec review command where one is configured; in Claude Code that is
+  `/code-review`. It catches what the defect lane cannot see: code that works and implements the
+  wrong thing.
 
 ## Validation
 
@@ -107,9 +112,9 @@ other.
 
 ## Library and API docs
 
-- Reach for **context7** first on any library, framework, SDK, CLI, or cloud service question. Call
-  `resolve-library-id`, then `query-docs`. It indexes current docs. Web search returns blog posts
-  about older versions.
+- Reach for a documentation-lookup tool first on any library, framework, SDK, CLI, or cloud service
+  question. Where context7 is configured, call `resolve-library-id` then `query-docs`. Such a tool
+  indexes current docs; web search returns blog posts about older versions.
 - Fall back to web search when context7 has no entry, or when the question is not documentation.
 
 ## Writing style

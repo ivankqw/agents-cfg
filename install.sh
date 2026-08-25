@@ -60,6 +60,7 @@ fi
 
 echo "== agents / hooks"
 for f in "$AC"/agents/*.md;  do link "$f" "$CLAUDE_DIR/agents/$(basename "$f")"; done
+rm -f "$CLAUDE_DIR/hooks/codex_review_reminder.py"   # renamed; drop the stale link
 for f in "$AC"/hooks/*;      do link "$f" "$CLAUDE_DIR/hooks/$(basename "$f")"; done
 
 echo "== bin"
