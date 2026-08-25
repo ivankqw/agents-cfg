@@ -44,6 +44,24 @@ somewhere else, put it in the private layer.
   belongs to someone else. Wait for approval before you implement.
 - Do not gate requested work behind an audit or a prerequisite you invented. Ask first.
 
+## Roles and configs
+
+Three roles do the work, and which model fills each one is a named choice, not a per-task decision.
+
+- **Orchestrator** holds the plan and the decisions. Spend here.
+- **Implementer** builds to an explicit brief in a fresh context, in parallel. Throughput matters
+  more than depth, because the brief carries the thinking.
+- **Reviewer** attacks a finished diff.
+
+**The reviewer must not be the model that wrote the code.** A reviewer sharing weights with the
+author shares its blind spots, and a shared blind spot cannot be seen from inside. Prefer a different
+vendor. Where that is impossible, use a different model, give it no shared context, and require it to
+run the tests and cite command plus output, because executed evidence does not care whose weights
+produced it.
+
+Named configs live in `configs/`. Pick one at the start of a stretch of work and say which one you
+are on. When a config forces the reviewer to share the author's weights, say so in the PR.
+
 ## Review before pushing
 
 Two lanes on the same fixed point. They overlap almost nowhere, so run both. Neither replaces the

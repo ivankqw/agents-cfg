@@ -1,6 +1,7 @@
 ---
 name: ship
-description: Run a piece of work from framing to draft PR, calling the right skill at each phase: grilling to stress a plan, impeccable for UI craft, deslop and stop-slop to clean up, delegate and code-review to review. Use when starting issue-backed work, when asked to ship a change or open a PR, or when finishing a branch left in flight.
+description: >-
+  Run a piece of work from framing to draft PR, calling the right skill at each phase. Stress the plan, apply craft gates to UI, clean the diff, then review it twice. Use when starting issue-backed work, when asked to ship a change or open a PR, or when finishing a branch left in flight.
 ---
 
 # Ship

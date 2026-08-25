@@ -96,6 +96,7 @@ to be installed.
 | `skills-lock.json` | Which third-party skills to install, and at which commit. |
 | `settings/settings.template.json` | A starting point. Merge by hand. |
 | `MACHINE-NOTES.md` | Per-machine setup. Not conventions. |
+| `configs/` | Named model and effort assignments per role. Pick one per stretch of work. |
 | `templates/` | Patterns to build from, such as a project worktree helper. |
 | `MAINTAINING.md` | How to change this repo: add a skill, unlock one, edit a convention, add a hook. |
 
