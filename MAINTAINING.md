@@ -1,0 +1,128 @@
+# Maintaining this repo
+
+For an agent asked to change this setup. `AGENTS.md` covers installing it. This file covers editing
+it without breaking it.
+
+Two rules run through everything below.
+
+**Verify, do not assume.** Every recipe here ends in a check you can run. A broken agent config
+fails quietly: the file sits on disk, nothing loads it, and no error appears.
+
+**Do not copy upstream skills into this repo.** Most skills come from other people's repos and are
+managed by `npx skills`. A copy pins them to one commit and cuts them off from updates.
+
+## Add a skill I wrote
+
+1. Write `skills/<name>/SKILL.md`. Frontmatter needs `name` and `description`.
+2. Run `./install.sh`. It links per item, so a new folder needs the re-run.
+3. Check the skill appears, then invoke it once.
+
+The `description` decides when an agent reaches for the skill. Lead it with the trigger, not the
+subject.
+
+## Add a third-party skill
+
+```bash
+npx skills add <owner>/<repo>
+./install.sh                    # links the new skill into ~/.claude/skills
+```
+
+Then record it, so a fresh machine gets it too. Copy the CLI's global lockfile into this repo and
+read the diff before keeping it:
+
+```bash
+cd ~/agents-cfg
+python3 - <<'PY'
+import json, pathlib
+src = json.load(open(pathlib.Path.home() / ".agents/.skill-lock.json"))
+src["skills"] = {k: v for k, v in src["skills"].items() if "larksuite" not in v.get("sourceUrl", "")}
+pathlib.Path("skills-lock.json").write_text(json.dumps(src, indent=2) + "\n")
+PY
+git diff skills-lock.json
+```
+
+## Let a skill invoke another skill
+
+Upstream marks some skills `disable-model-invocation: true`, which reserves them for the human. A
+skill cannot call them and the runtime refuses to let you rebuild their workflow.
+
+`skillOverrides` cannot lift the flag. The harness locks the `on` and `name-only` states whenever the
+frontmatter sets it. The flag has to leave the file.
+
+Add the skill name to `skills-unlock.txt` and run `./install.sh`, which strips the flag in
+`~/.agents/skills`. Leave a skill locked when it only makes sense from a human.
+
+**`npx skills update` restores the flag.** Re-run `./install.sh` after any update, or those phases go
+quiet with no error.
+
+## Change a convention
+
+Edit `conventions/AGENTS.md`. Claude Code picks it up on the next turn through the `@import`. Codex
+reads a generated copy, so run `./install.sh` or Codex keeps the old text.
+
+Check it loaded:
+
+```bash
+cd /tmp && claude -p "Do not use tools. If your instructions contain '<a phrase you just wrote>',
+write LOADED, else write MISSING."
+```
+
+Keep the file under 200 lines. Past that, the harness docs say instructions start getting ignored,
+so trim before you add. Ask of each line: would removing it cause a mistake? If not, cut it.
+
+## Add a hook
+
+Put the script in `hooks/` and run `./install.sh`. Register it in `~/.claude/settings.json`, which
+this repo does not track; `settings/settings.template.json` shows the shape.
+
+Keep hooks advisory. A blocking hook that fires on work you consider fine gets switched off, and then
+it protects nothing. Feed evidence into the turn and let the model decide.
+
+Test a hook by piping the event JSON into it:
+
+```bash
+echo '{"tool_name":"Bash","tool_input":{"command":"git push origin x"}}' | python3 hooks/<name>.py
+```
+
+## Add an agent
+
+Write `agents/<name>.md` with `name`, `description`, `model`, and `effort`. Run `./install.sh`.
+
+`effort` works only in the agent file. No dispatch-time parameter sets it, so an agent without it
+runs at whatever the session is using.
+
+## What never goes in this repo
+
+- Credentials of any kind. `mcp/servers.json` holds names and URLs; keys come from the environment.
+- `~/.claude.json`. It mixes machine state with an API key.
+- Anything naming an employer, a host, or a person. That belongs in the private layer at
+  `~/agents-cfg-private`.
+- Transcripts, job scratch, and `history.jsonl`.
+
+## Traps that cost time
+
+- **A prose reference loads nothing.** Naming another file in `CLAUDE.md` does not pull it in. Only
+  `@import` does. A whole conventions file sat unread for months this way.
+- **`git commit -m` with a quoted phrase inside the message fails**, and the `git push` afterwards
+  still prints success. Write the message to a temp file and use `-F`.
+- **`grep -c` prints `0` and exits `1`.** A `|| echo 0` fallback then doubles the value and every
+  comparison after it is wrong.
+- **`skillOverrides` matches by name.** When upstream renames a skill, an `off` override stops
+  covering it and the skill comes back unannounced.
+- **`npx skills experimental_install` reads `skills-lock.json` from the current directory** and
+  installs into `./.agents/skills`. Run it from `~`. The `-g` flag does not change where it writes.
+- **BSD and GNU differ.** `date -Iseconds`, `readlink -f`, `stat -c` and `sed -i` all behave
+  differently on macOS. Prefer plain format strings.
+
+## Before you say it works
+
+Install into a throwaway `HOME` and look at what appears:
+
+```bash
+SB=$(mktemp -d); mkdir -p "$SB/home"
+env HOME="$SB/home" PRIVATE_CONFIG="$SB/none" ./install.sh
+find "$SB/home" -maxdepth 3 \( -type l -o -type f \)
+rm -rf "$SB"
+```
+
+Then run the canary from the convention section above. Paste the real output.
