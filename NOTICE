@@ -1,0 +1,14 @@
+agents-cfg
+Copyright 2026 Ivan Koh
+Licensed under the MIT License. See LICENSE.
+
+This product includes material adapted from the Codex plugin for Claude Code,
+Copyright 2026 OpenAI, licensed under the Apache License, Version 2.0:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Adapted in agents/reviewer.md: the adversarial stance, the attack-surface
+priority list, and the calibration rules, taken from that plugin's
+prompts/adversarial-review.md. Modified by rewording throughout and by adding a
+requirement for executed evidence and a VERIFIED / ASSUMED split, neither of
+which the original asks for.

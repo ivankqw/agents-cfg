@@ -20,6 +20,13 @@ different vendor. Where that is not available, use a different model, and requir
 the tests and cite command plus output, because executed evidence does not care whose weights
 produced it.
 
+## Reading a config
+
+The `reviewer` entry names the model you *want* reviewing. Where a router tries that model first and
+falls back when it is unavailable, the fallback reviewer runs on whatever the agent definition pins,
+which is not a contradiction: the config states the intent, the agent definition states the floor.
+When the fallback fires, the review is no longer cross-vendor. Say so.
+
 ## Choosing
 
 | Config | Orchestrator | Implementer | Use it when |

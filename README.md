@@ -55,3 +55,7 @@ See the table in [`AGENTS.md`](./AGENTS.md).
 ## License
 
 MIT. See [LICENSE](./LICENSE).
+
+`agents/reviewer.md` adapts the adversarial stance, attack-surface list, and calibration rules from
+the Codex plugin for Claude Code, Copyright 2026 OpenAI, under the Apache License 2.0. See
+[NOTICE](./NOTICE).
