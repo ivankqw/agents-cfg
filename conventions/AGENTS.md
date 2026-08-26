@@ -101,6 +101,29 @@ other.
   unverified, the next step, and the commands to resume. Do this unasked. It is what survives a
   context compaction.
 
+### Keeping the board true
+
+A tracker decays, and a decayed board costs more than an empty one. The `cleanup-crew` skill runs
+these as passes; the rules matter on their own.
+
+- **A stale ticket at top priority is worse than no ticket.** Two tickets once sat at Urgent with a
+  `DO NOT RUN` block at the top of the body, so the queue advertised as most important the one action
+  nobody must take. When a decision invalidates a ticket, resolve it the same day. Do not annotate it
+  and leave the priority alone.
+- **Stale has three shapes, and one rule loses two of them.** Cancel a ticket only when its premise is
+  false *and* nothing is left to deliver. Rewrite it when the method died but the payload is still
+  wanted. Reframe it when the framing died and the substance is live. A blanket close-if-stale rule
+  destroys real work.
+- **Cancelled and Done are different claims.** Done asserts the work happened. Marking an abandoned
+  ticket Done corrupts every later reading of what shipped.
+- **Name what a closure does not carry.** List the still-wanted parts of a superseded ticket and where
+  each went. Where a part went nowhere, say so, rather than implying coverage.
+- **Measure the premise, do not read it.** A ticket that annotates itself as invalid is usually right
+  about its method and often wrong about its problem. A ticket asserting a field was empty everywhere
+  had it populated on every row.
+- **A child issue does not inherit its parent's project.** Set the project explicitly on every child,
+  or the subtree becomes unreachable from every project view.
+
 ## Branches and PRs
 
 - Prefix branches `feat/`, `fix/`, `refactor/`, `docs/`, `chore/`. Never a personal prefix.

@@ -18,6 +18,17 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/cleanup_crew_after_pr.py"
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
