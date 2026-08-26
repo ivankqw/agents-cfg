@@ -14,6 +14,40 @@ description: >-
 branch naming, PR shape, the verification bar. Read it. This file holds the order, the skill that
 owns each phase, and the bar for calling a phase done.
 
+## Keep moving
+
+The phases are a route, not a set of checkpoints to report from. Walk the whole route in one go.
+
+- **A "Done when" line is a self-check, not a stopping point.** Read it, satisfy it, start the next
+  phase in the same turn. Do not summarise the phase and wait. The only pauses are the ones in
+  [Stop and ask when](#stop-and-ask-when), and that list is short on purpose.
+- **Blocked on one thing is not blocked.** Do every part that does not depend on the answer, then
+  state the assumption you are proceeding under, or ask the one question at the point it actually
+  blocks you. Never hold finished work hostage to an unanswered question.
+- **Finish the batch, not the first item.** When the work is a frontier of several issues, ship one,
+  then take the next without being told. The flow ends when the frontier is empty or a real blocker
+  is hit, not when one PR opens.
+- **A phase that does not apply is skipped, not discussed.** No dogfood phase on a change with no
+  rendered surface. Note it in one clause and move on.
+- **Report once, at the end.** One report covering what shipped, what is proven and by which command,
+  and what is left. Not a report per phase.
+
+## Delegate the building, keep the deciding
+
+Run the phases as an orchestrator. Your context is for the design and the judgement; spend other
+agents' context on the searching and the typing.
+
+- **Dispatch a fresh agent for anything wide** — a grep sweep, a log trawl, a survey of many files.
+  Keep the findings, not the file dumps.
+- **Parallelise construction across independent files, one agent per file.** Never two agents in the
+  same file. Send them in a single message so they run at once.
+- **Never delegate a decision.** Scope, design, which rule is the right rule, and judging a finding
+  stay with you. A subagent handed a decision returns a confident guess.
+- **Re-derive any number you act on.** A figure a subagent reports is unverified until you measure it
+  yourself. Tag it in the PR accordingly.
+- **The reviewer must not be the agent that wrote the code**, and must never be a fork of this
+  session: a fork inherits the author's blind spots along with the context.
+
 ## The flow
 
 | Phase | Skill | Who starts it |
@@ -122,6 +156,22 @@ the next step, and the commands to resume.
 
 ## Stop and ask when
 
-- The issue carries no acceptance criterion and no runnable verification.
-- The right fix belongs to another implementer. Deliver the diagnosis and an ADR-shaped issue.
-- A review finding implies a design change rather than a patch. Surface it first.
+Stop only where proceeding under any assumption would be unsafe, or would make the work useless if
+the guess is wrong. Before you stop, deliver everything that does not depend on the answer, and say
+explicitly what you left out and why.
+
+- **The action is destructive and not reversible**, and the intent is not already unambiguous. A
+  deletion, a force-push, a production write with no restore point.
+- **Two readings of the request lead to materially different work**, and the cheaper one is not
+  obviously right. Ask the one question; do not survey the options.
+- **A review finding implies a design change rather than a patch.** Surface the finding, keep
+  shipping the rest of the branch.
+
+These are not reasons to stop:
+
+- A phase finished. Start the next one.
+- The issue has no acceptance criterion. Write one from the issue, state it, proceed.
+- A decision has an obvious default. Take it, name it in the PR, move on.
+- The fix belongs to another implementer. Deliver the diagnosis *and* the ADR-shaped issue, then take
+  the next item off the frontier.
+- You want to check the plan is still wanted. It is. It was asked for.
