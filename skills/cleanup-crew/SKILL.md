@@ -36,7 +36,7 @@ If the repository and the tracker disagree, the repository wins and say so in th
 
 Do the cheap structural passes first. They need no judgement, and they make the later passes legible.
 
-### 1. Orphans — no project
+### 1. Orphans, filed under no project
 
 Query the team for each wayfinder label in turn: `map`, `task`, `research`, `grilling`, `prototype`.
 Then list open issues per project to catch children whose siblings are filed and they are not.
@@ -44,7 +44,7 @@ Then list open issues per project to catch children whose siblings are filed and
 **A child does not inherit its parent's project.** Trackers generally do not do this, which is why
 orphans accumulate silently. Assign each orphan the project of the map it hangs from.
 
-Read each issue before writing. Never overwrite a project that is already set — record it as a
+Read each issue before writing. Never overwrite a project that is already set. Record it as a
 possible misfiling and leave it for the report.
 
 This pass is mechanical and high-volume. **Delegate it** to a subagent with an explicit id list and a
@@ -66,8 +66,8 @@ Search open issues for a body containing `DO NOT RUN`, `DO NOT EXECUTE`, `CAUTIO
 those markers is a finding.
 
 **Then verify the premise yourself before acting.** A ticket that annotates itself as invalid is
-usually right about its method and often wrong about its problem. Measure the live system — the
-deployed configuration, the actual row counts, the API's real answer — and find out which.
+usually right about its method and often wrong about its problem. Measure the live system: the
+deployed configuration, the actual row counts, the API's real answer. Then find out which.
 
 Three outcomes, and picking the wrong one destroys real work:
 
@@ -86,7 +86,7 @@ and search open bodies for its id and its title. Each hit is a body claiming wor
 is not, which is enough to stop somebody picking it up.
 
 Fix with a short dated note at the top of the body. Say what changed, and say precisely what did
-**not** change — access being granted is not the same as ownership moving.
+**not** change. Access being granted is not the same as ownership moving.
 
 Give merged pull requests the same treatment. A ticket reading "cannot proceed until #908 merges" is a
 ticket nobody returns to after #908 merges.
@@ -94,7 +94,7 @@ ticket nobody returns to after #908 merges.
 ### 5. Overlaps
 
 Group open issues covering the same ground. Report them as merge candidates, with both ids and what
-overlaps. **Do not merge them** — which of two framings survives is a decision, not a cleanup.
+overlaps. **Do not merge them.** Which of two framings survives is a decision, not a cleanup.
 
 ## Rules that came from things going wrong
 
@@ -121,9 +121,9 @@ overlaps. **Do not merge them** — which of two framings survives is a decision
 
 One report, in this order:
 
-1. **Fixed without asking** — counts and ids, grouped by kind of rot.
+1. **Fixed without asking.** Counts and ids, grouped by kind of rot.
 2. **Corrections to a map or a ticket body**, each with the measurement that justified it.
-3. **Judgement calls** — merge candidates, tickets whose payload may no longer be wanted, closures
+3. **Judgement calls.** Merge candidates, tickets whose payload may no longer be wanted, closures
    that dropped something with no new home. One question each, with a recommendation.
 
 Keep it short. The value is the fixed board, not the prose about it.

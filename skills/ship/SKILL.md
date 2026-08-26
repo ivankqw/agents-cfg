@@ -37,16 +37,15 @@ The phases are a route, not a set of checkpoints to report from. Walk the whole 
 Run the phases as an orchestrator. Your context is for the design and the judgement; spend other
 agents' context on the searching and the typing.
 
-- **Dispatch a fresh agent for anything wide** — a grep sweep, a log trawl, a survey of many files.
+- **Dispatch a fresh agent for anything wide:** a grep sweep, a log trawl, a survey of many files.
   Keep the findings, not the file dumps.
 - **Parallelise construction across independent files, one agent per file.** Never two agents in the
   same file. Send them in a single message so they run at once.
 - **Never delegate a decision.** Scope, design, which rule is the right rule, and judging a finding
   stay with you. A subagent handed a decision returns a confident guess.
-- **Re-derive any number you act on.** A figure a subagent reports is unverified until you measure it
-  yourself. Tag it in the PR accordingly.
-- **The reviewer must not be the agent that wrote the code**, and must never be a fork of this
-  session: a fork inherits the author's blind spots along with the context.
+- **Never delegate a decision, and never inherit a number.** Both rules, and the reviewer
+  independence rule that follows from them, live in the conventions file this skill opens with. They
+  apply here without being restated.
 
 ## The flow
 
