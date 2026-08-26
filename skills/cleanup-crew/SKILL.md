@@ -128,10 +128,12 @@ overlaps. **Do not merge them.** Which of two framings survives is a decision, n
   it named as its blocker.
 - **A subagent's count is unverified until you re-derive it.** Delegate the sweep; re-measure anything
   you act on.
-- **Closed is not the same as answered.** A grilling ticket closed Done, whose body still poses its
-  question with two options and no choice, silently unblocks everything waiting on it. Two open
-  tickets cited one such decision as their blocker; the blocker had closed eight days earlier without
-  recording what it decided.
+- **Read the comments before calling a decision lost.** A decision ticket closed Done, whose body
+  still poses its question with two options and no choice, looks exactly like a lost decision. Twice
+  out of two, the answer was there: once in a resolution comment posted seconds before the close,
+  once in a follow-up ticket that executed it. The rot is real but milder than it looks. The body not
+  stating the outcome is what needs fixing, and announcing a decision lost when it is merely
+  misfiled is its own error.
 - **Two tickets can be stale in opposite directions.** One had a dead method and a live payload;
   another had a dead framing and a live defect that was the sharpest bug in the set. A single
   close-if-stale rule would have lost both.
