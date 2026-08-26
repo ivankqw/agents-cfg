@@ -91,7 +91,22 @@ Fix with a short dated note at the top of the body. Say what changed, and say pr
 Give merged pull requests the same treatment. A ticket reading "cannot proceed until #908 merges" is a
 ticket nobody returns to after #908 merges.
 
-### 5. Overlaps
+### 5. Decisions that were never written down
+
+A decision ticket closed without recording its answer is rot that reads as progress. The board shows
+it resolved; the body still shows two options and no choice. Every ticket blocked on it is now blocked
+on nothing, and nobody can tell what was decided.
+
+Take the closed decision tickets from the last fortnight and check each body states an outcome. Where
+one does not, look for the answer in its comments or its linked commit. If the answer is recoverable,
+write it into the body as a dated resolution line. **If it is not recoverable, say so on the ticket**
+and on anything that cited it as a blocker: the decision has to be taken again, and pretending
+otherwise silently unblocks work onto a choice nobody made.
+
+Never invent the outcome from the options. A plausible reconstruction of a decision is worse than an
+admission that it was lost, because it will be built on.
+
+### 6. Overlaps
 
 Group open issues covering the same ground. Report them as merge candidates, with both ids and what
 overlaps. **Do not merge them.** Which of two framings survives is a decision, not a cleanup.
@@ -113,6 +128,10 @@ overlaps. **Do not merge them.** Which of two framings survives is a decision, n
   it named as its blocker.
 - **A subagent's count is unverified until you re-derive it.** Delegate the sweep; re-measure anything
   you act on.
+- **Closed is not the same as answered.** A grilling ticket closed Done, whose body still poses its
+  question with two options and no choice, silently unblocks everything waiting on it. Two open
+  tickets cited one such decision as their blocker; the blocker had closed eight days earlier without
+  recording what it decided.
 - **Two tickets can be stale in opposite directions.** One had a dead method and a live payload;
   another had a dead framing and a live defect that was the sharpest bug in the set. A single
   close-if-stale rule would have lost both.
