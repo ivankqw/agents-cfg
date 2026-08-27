@@ -24,13 +24,22 @@ The phases are a route, not a set of checkpoints to report from. Walk the whole 
 - **Blocked on one thing is not blocked.** Do every part that does not depend on the answer, then
   state the assumption you are proceeding under, or ask the one question at the point it actually
   blocks you. Never hold finished work hostage to an unanswered question.
+- **Search before parking on a human action.** "Only you can do it" is a claim to verify: hunt for an
+  endpoint, a CLI, a permission you already hold that drives it yourself, and name what you searched
+  when you do park. A unit parked as human-only turned out to have an existing retry endpoint the
+  whole time. And merged is not deployed, deployed is not observed: a unit is done when seen working
+  in the running app.
 - **Finish the batch, not the first item.** When the work is a frontier of several issues, ship one,
   then take the next without being told. The flow ends when the frontier is empty or a real blocker
   is hit, not when one PR opens.
 - **A phase that does not apply is skipped, not discussed.** No dogfood phase on a change with no
   rendered surface. Note it in one clause and move on.
-- **Report once, at the end.** One report covering what shipped, what is proven and by which command,
-  and what is left. Not a report per phase.
+- **Keep a run ledger; report in goals.** Append one dated line to a repo-local `.agent-ledger.md`
+  as each phase lands: what moved, proven by what. A "status?" is answered by reading the ledger,
+  never by recall. The end-of-batch report opens with the goals and their remaining work in plain
+  language, then the queue only the human can unblock, then PR detail last. A report that is a table
+  of PR numbers is unreadable at the scale the human actually plans at: one session produced ~25 bare
+  "status?" turns because every report led with PRs.
 
 ## Delegate the building, keep the deciding
 
@@ -46,6 +55,12 @@ agents' context on the searching and the typing.
 - **Never delegate a decision, and never inherit a number.** Both rules, and the reviewer
   independence rule that follows from them, live in the conventions file this skill opens with. They
   apply here without being restated.
+- **Brief every implementer delegate on how it ends.** Suites run in the foreground with an explicit
+  timeout and status captured to a file; the delegate commits before any mutation testing, restores
+  mutants from `cp` backups; and its final message states results. A final message that is a promise
+  ("waiting for the suite") burns the whole dispatch: one delegate spent 3,000 seconds across three
+  turns saying it was waiting. Verify every ticket or issue id the delegate cites before pushing its
+  commits; delegates invent plausible ids.
 
 ## The flow
 
@@ -72,6 +87,9 @@ Read the issue for constraints, project context, and any PR already linked. Crea
 workspace for the change. Use the project's own worktree helper if it has one, so gitignored config
 comes across; `../../templates/worktree-helper.md` describes what such a helper does. Otherwise
 `git worktree add ../<name> -b <branch> <source-ref>`.
+
+Base the new tree on the fetched `origin/<default>`, never the bare local ref: a stale local `main`
+once produced a tree missing a whole directory.
 
 If the work is large, or spans more sessions than one context holds, invoke `wayfinder` to map it
 into decision tickets before building anything.
@@ -109,10 +127,21 @@ Run the cheapest check that exercises the change. Paste the real command and its
 tightened is listed, and each changed interface has its downstream callers named, including callers
 outside the repo.
 
+Three traps make a pasted "real output" fake, each hit in production sessions:
+
+- Capture status to a file (`cmd > log 2>&1; echo $? > exit.txt`) and read the file. A status read
+  any other way reports the wrong process.
+- Run node binaries from `./node_modules/.bin` after an install. `npx <tool>` in a tree without
+  `node_modules` resolves a decoy package that exits 0 without running anything.
+- An unblock is proven by exercising the blocked path against what it actually consumes. Re-reading
+  the contract you already trusted retires nothing: "last blocker" was claimed three times off the
+  same re-diff before running the consumer exposed four more gaps.
+
 ## 5. Dogfood it, before it becomes a PR
 
 For any change with a rendered surface, invoke `dogfood-local`. That skill owns the method and the
-bar for this phase.
+bar for this phase. On a batch frontier, dogfood the whole batch once from an integration worktree
+rather than per PR; the per-issue form is for a single change.
 
 ## 6. Clean the diff
 
@@ -141,7 +170,8 @@ Run both. They overlap almost nowhere, so one passing says nothing about the oth
 ## 8. Push and open a draft PR
 
 Check `git status --short --branch`, run `git diff --check`, rebase on the default branch if you have
-drifted. Push, then open the PR as a draft with the issue id in the title and the body sections the
+drifted. Confirm the branch is ahead of its base (`git log origin/<default>..HEAD` is non-empty)
+before pushing: a branch whose changes were reverted fails at PR creation, long after the mistake. Push, then open the PR as a draft with the issue id in the title and the body sections the
 conventions name.
 
 **Done when** the draft PR exists and its body carries those sections.
