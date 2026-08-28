@@ -1,0 +1,28 @@
+[features]
+hooks = true
+multi_agent = true
+
+[marketplaces.pstack-claude]
+source_type = "local"
+source = "HOME_PATH/.local/share/agent-plugins/pstack-claude"
+
+[plugins."pstack@pstack-claude"]
+enabled = true
+
+[[hooks.PreToolUse]]
+matcher = "^Bash$"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "python3 HOME_PATH/.codex/hooks/review_reminder.py"
+timeout = 30
+statusMessage = "Checking git push review reminder"
+
+[[hooks.PostToolUse]]
+matcher = "^Bash$"
+
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = "python3 HOME_PATH/.codex/hooks/cleanup_crew_after_pr.py"
+timeout = 30
+statusMessage = "Checking pull request cleanup reminder"

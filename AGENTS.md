@@ -15,14 +15,18 @@ under **Bootstrap**.
 | `~/.claude/skills/*` | links to skills, both from here and from `~/.agents/skills` |
 | `~/.claude/agents/*` | links to `agents/` |
 | `~/.claude/hooks/*` | links to `hooks/` |
+| `~/.agents/skills/*` | links repo, private, and pinned pstack skills beside installer-managed skills |
+| `~/.codex/prompts/*` | links pinned pstack command stubs |
+| `~/.codex/hooks/*` | links advisory hooks |
 | `~/.local/bin/*` | links to `bin/`, putting `delegate` on the PATH |
 | `~/skills-lock.json` | link to the lockfile, where the `skills` CLI looks for it |
 | `~/.claude/CLAUDE.md` | one `@import` per layer, so Claude Code loads the conventions |
 | `~/AGENTS.md` | the same conventions concatenated, because Codex reads `AGENTS.md` |
 | `~/.codex/AGENTS.md` | link to `~/AGENTS.md` |
+| `~/.codex/pstack-models.md` | link to the confirmed Codex pstack model sheet |
 
-It writes no credential, and it leaves `~/.claude/settings.json` alone. Merge
-`settings/settings.template.json` by hand.
+It writes no credential. It leaves both harness settings files alone. Merge the files in `settings/`
+by hand. The install reports each missing Codex setting.
 
 ## Prerequisites
 
@@ -34,12 +38,16 @@ It writes no credential, and it leaves `~/.claude/settings.json` alone. Merge
 
 ```bash
 git clone git@github.com:ivankqw/agents-cfg.git ~/agents-cfg
-~/agents-cfg/install.sh                 # links, and places ~/skills-lock.json
-cd ~ && npx skills experimental_install # restores third-party skills at their recorded commits
+~/agents-cfg/bootstrap.sh               # pins pstack, restores skills, and links the setup
 ```
 
-Order matters. `install.sh` places `~/skills-lock.json`, and the `skills` CLI reads that file from
-whatever directory you run it in. Run it from `~` so the skills land in `~/.agents/skills`.
+`bootstrap.sh` is the reproducible path. It checks out the recorded pstack revision under
+`~/.local/share/agent-plugins`. It stops if that checkout has local changes.
+
+Matt Pocock and other third-party skills stay in `~/.agents/skills`. Codex discovers that directory
+directly. Claude receives links to the same skills. Do not copy these skills into `.codex/skills`.
+
+Bootstrap runs the skills CLI from `~`. This location makes the CLI install into `~/.agents/skills`.
 
 Put `~/.local/bin` on your PATH if it is not there:
 
@@ -57,6 +65,14 @@ write LOADED, else write MISSING."
 ```
 
 `MISSING` means `~/.claude/CLAUDE.md` did not import the conventions. Run `./install.sh` again.
+
+Start the next Codex session from `/tmp`, where no project `AGENTS.md` applies. Ask whether its
+instructions contain `A virtue cannot be graded`. Then ask it for the pstack `bug-fix` model and the
+`setup-pstack` skill. Treat any missing item as an install failure.
+
+Check `~/.codex/config.toml` after install reports missing settings. Merge
+`settings/codex.config.template.toml`, then restart Codex. The fragment enables hooks, pstack, and
+multi-agent pstack panels. It does not replace user settings.
 
 ## Update
 
@@ -94,7 +110,9 @@ to be installed.
 | `hooks/` | Advisory `PreToolUse` hooks. They never block. |
 | `bin/delegate` | Routes review work to Codex while it has credit, else to the `reviewer` agent. |
 | `skills-lock.json` | Which third-party skills to install, and at which commit. |
+| `pstack-revision.txt` | The exact pstack plugin commit to install. |
 | `settings/settings.template.json` | A starting point. Merge by hand. |
+| `settings/codex.config.template.toml` | Codex settings fragment. Merge by hand. |
 | `MACHINE-NOTES.md` | Per-machine setup. Not conventions. |
 | `configs/` | Named model and effort assignments per role. Pick one per stretch of work. |
 | `templates/` | Patterns to build from, such as a project worktree helper. |
@@ -113,6 +131,20 @@ Some skills drive a CLI on top of the prompt. None of them need an `npm install`
 
 `impeccable` ships its scripts inside the skill folder, so they arrive with the skill and stay in
 step with it. Do not vendor copies elsewhere.
+
+## Codex and pstack
+
+Codex loads pstack skills from `~/.agents/skills`. Slash-command stubs load from `~/.codex/prompts`.
+The local marketplace points at the pinned checkout. All three paths use the same plugin revision.
+When a third-party parent has the same name, install adds pstack as a same-name child. This preserves
+the parent skill and exposes the pstack namespaced skill.
+
+Codex cannot expand Claude `@imports`. The install appends `configs/pstack-codex.md` while it builds
+`~/AGENTS.md`. It also links the model sheet into `~/.codex` for direct examination.
+
+The harness direction is not symmetric. Claude can call the Codex reviewer plugin. Codex cannot call
+the configured Claude reviewer plugin. Use `single-vendor` for Codex-led work. Use `deep` only when
+Claude owns the session.
 
 ## The private layer
 

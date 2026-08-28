@@ -24,7 +24,7 @@ subject.
 
 ```bash
 npx skills add <owner>/<repo>
-./install.sh                    # links the new skill into ~/.claude/skills
+./install.sh                    # Codex discovers it; Claude receives a link
 ```
 
 Then record it, so a fresh machine gets it too. Copy the CLI's global lockfile into this repo and
@@ -78,6 +78,9 @@ this repo does not track; `settings/settings.template.json` shows the shape.
 Keep hooks advisory. A blocking hook that fires on work you consider fine gets switched off, and then
 it protects nothing. Feed evidence into the turn and let the model decide.
 
+The install links each hook into both harness directories. It preserves a non-symlink user file.
+Register Codex hooks with `settings/codex.config.template.toml`. The install never edits the config.
+
 Test a hook by piping the event JSON into it:
 
 ```bash
@@ -90,6 +93,26 @@ Write `agents/<name>.md` with `name`, `description`, `model`, and `effort`. Run 
 
 `effort` works only in the agent file. No dispatch-time parameter sets it, so an agent without it
 runs at whatever the session is using.
+
+## Update pstack
+
+Use a clean pstack checkout. Fetch and examine the upstream revision before you record it.
+
+```bash
+git -C ~/.local/share/agent-plugins/pstack-claude fetch origin
+git -C ~/.local/share/agent-plugins/pstack-claude show <revision>
+printf '%s\n' <full-commit-id> > pstack-revision.txt
+./bootstrap.sh
+```
+
+Bootstrap stops when the checkout has local changes. It also stops when the revision is missing.
+Install rejects a checkout at a different revision.
+
+Do not add pstack to `skills-lock.json`. Do not copy pstack skills into this repo. The pinned plugin
+checkout supplies its skills and prompt stubs.
+
+Update `configs/pstack-codex.md` only with confirmed Codex model slugs. The install appends this file
+to generated Codex instructions because Codex does not support Claude `@imports`.
 
 ## What never goes in this repo
 
@@ -113,14 +136,19 @@ runs at whatever the session is using.
   installs into `./.agents/skills`. Run it from `~`. The `-g` flag does not change where it writes.
 - **BSD and GNU differ.** `date -Iseconds`, `readlink -f`, `stat -c` and `sed -i` all behave
   differently on macOS. Prefer plain format strings.
+- **Harness direction is not symmetric.** Claude can call the Codex reviewer plugin. Codex has no
+  reciprocal Claude plugin. Select `single-vendor` when Codex owns the session.
 
 ## Before you say it works
 
 Install into a throwaway `HOME` and look at what appears:
 
 ```bash
-SB=$(mktemp -d); mkdir -p "$SB/home"
-env HOME="$SB/home" PRIVATE_CONFIG="$SB/none" ./install.sh
+SB=$(mktemp -d); mkdir -p "$SB/home/.local/share/agent-plugins"
+git clone --no-hardlinks ~/.local/share/agent-plugins/pstack-claude \
+  "$SB/home/.local/share/agent-plugins/pstack-claude"
+env HOME="$SB/home" PRIVATE_CONFIG="$SB/none" \
+  PSTACK_DIR="$SB/home/.local/share/agent-plugins/pstack-claude" ./install.sh
 find "$SB/home" -maxdepth 3 \( -type l -o -type f \)
 rm -rf "$SB"
 ```
