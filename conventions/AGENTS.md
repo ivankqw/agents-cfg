@@ -62,6 +62,11 @@ produced it.
 Named configs live in `configs/`. Pick one at the start of a stretch of work and say which one you
 are on. When a config forces the reviewer to share the author's weights, say so in the PR.
 
+Configs are directional. `lean`, `default`, and `deep` require Claude Code as the orchestrator.
+Claude Code can call the Codex reviewer through its plugin. Codex has no reciprocal Claude plugin.
+When Codex holds the plan, use `single-vendor`. Do not treat `claude -p` as the configured reviewer.
+It starts a separate CLI process and bypasses the plugin lane.
+
 ## Review before pushing
 
 Two lanes on the same fixed point. They overlap almost nowhere, so run both. Neither replaces the
