@@ -36,6 +36,38 @@ If the repository and the tracker disagree, the repository wins and say so in th
 
 Do the cheap structural passes first. They need no judgement, and they make the later passes legible.
 
+### 0. Enumerate the board before you sweep it
+
+Do this first, every time, and write the counts down. Every later pass is scoped by what this step
+found, so a category missed here is invisible for the whole run.
+
+**List the states the tracker actually has, and query each one.** Do not assume the open set is
+"backlog plus in progress". A real run swept two states, reported the board as understood, and was
+asked a direct question it could not answer: two `Urgent` tickets and a live production trap sat in
+`Todo` and `In Review`, states nobody had queried. The report was not wrong about what it saw. It was
+wrong about what it had looked at, which is worse, because it reads as coverage.
+
+Enumerate along **every** axis the tracker offers, and report the count per bucket:
+
+- **State.** Ask the tracker for its state list rather than naming states from memory. Backlog, Todo,
+  In Progress, In Review, Triage, Blocked — the names vary per tracker and per team.
+- **Project**, including issues with none.
+- **Priority**, so an Urgent sitting in an unswept state is impossible to miss.
+- **Assignee**, including unassigned.
+- **Label**, including issues with none.
+
+Then state the total open count and check it against the sum of your per-state counts. If they
+disagree, a state was missed and every later pass is unsound.
+
+**Say in the report which states and categories you swept, and which you did not.** A sweep that
+names its own boundary can be corrected. One that implies completeness cannot.
+
+**Read in two steps: list to enumerate, get to judge.** Tracker list calls truncate issue bodies
+(often to a few hundred characters), so a sweep built on list output alone is exhaustive only over
+each issue's opening — a `DO NOT RUN` buried mid-body slips through. Every candidate a pass acts on
+or clears gets its full body fetched first, and a sweep is called exhaustive only over full-body
+reads.
+
 ### 1. Orphans, filed under no project
 
 Query the team for each wayfinder label in turn: `map`, `task`, `research`, `grilling`, `prototype`.
@@ -91,13 +123,38 @@ Fix with a short dated note at the top of the body. Say what changed, and say pr
 Give merged pull requests the same treatment. A ticket reading "cannot proceed until #908 merges" is a
 ticket nobody returns to after #908 merges.
 
-### 5. Overlaps
+### 5. Decisions that were never written down
+
+A decision ticket closed without recording its answer is rot that reads as progress. The board shows
+it resolved; the body still shows two options and no choice. Every ticket blocked on it is now blocked
+on nothing, and nobody can tell what was decided.
+
+Take the closed decision tickets from the last fortnight and check each body states an outcome. Where
+one does not, look for the answer in its comments or its linked commit. If the answer is recoverable,
+write it into the body as a dated resolution line. **If it is not recoverable, say so on the ticket**
+and on anything that cited it as a blocker: the decision has to be taken again, and pretending
+otherwise silently unblocks work onto a choice nobody made.
+
+Never invent the outcome from the options. A plausible reconstruction of a decision is worse than an
+admission that it was lost, because it will be built on.
+
+### 6. Overlaps
 
 Group open issues covering the same ground. Report them as merge candidates, with both ids and what
 overlaps. **Do not merge them.** Which of two framings survives is a decision, not a cleanup.
 
 ## Rules that came from things going wrong
 
+- **Backlog and In Progress are not the board.** Two states were swept and the board pronounced
+  healthy. The states nobody queried held an `Urgent` approval-routing defect untouched for nine
+  days, an `Urgent` database-hardening ticket, and a production trap: two container apps holding
+  divergent copies of a processing control, one naming entries that no longer exist. The sweep's
+  conclusions were all true and its scope was silently a third of the board. Enumerate the states
+  from the tracker, not from habit.
+- **The dormant hazard is the one that reads as fixed.** That divergent allowlist was masked by an
+  `ALLOW_ALL=true` flag on both apps, so nothing misbehaved and the ticket looked closeable. It is
+  primed to spring the moment somebody turns the flag off — which is the careful thing to do before a
+  large import. Measure whether a hazard is *absent* or merely *masked*, and say which.
 - **Measure the premise, do not read it.** A ticket asserted a key field was "empty everywhere". It
   was populated on every one of ~1,500 rows. Cancelling it on the ticket's own account would have
   been the right call for entirely the wrong reason, and measuring turned up two further corrections
@@ -113,6 +170,12 @@ overlaps. **Do not merge them.** Which of two framings survives is a decision, n
   it named as its blocker.
 - **A subagent's count is unverified until you re-derive it.** Delegate the sweep; re-measure anything
   you act on.
+- **Read the comments before calling a decision lost.** A decision ticket closed Done, whose body
+  still poses its question with two options and no choice, looks exactly like a lost decision. Twice
+  out of two, the answer was there: once in a resolution comment posted seconds before the close,
+  once in a follow-up ticket that executed it. The rot is real but milder than it looks. The body not
+  stating the outcome is what needs fixing, and announcing a decision lost when it is merely
+  misfiled is its own error.
 - **Two tickets can be stale in opposite directions.** One had a dead method and a live payload;
   another had a dead framing and a live defect that was the sharpest bug in the set. A single
   close-if-stale rule would have lost both.
@@ -121,6 +184,8 @@ overlaps. **Do not merge them.** Which of two framings survives is a decision, n
 
 One report, in this order:
 
+0. **Scope swept.** The states, projects and categories queried, with counts, and anything
+   deliberately not swept. First, because every other section is only as good as this one.
 1. **Fixed without asking.** Counts and ids, grouped by kind of rot.
 2. **Corrections to a map or a ticket body**, each with the measurement that justified it.
 3. **Judgement calls.** Merge candidates, tickets whose payload may no longer be wanted, closures

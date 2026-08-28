@@ -1,10 +1,12 @@
 ---
 name: dogfood-local
 description: >-
-  Runs the app on a local server and drives it in a real browser to judge a
-  change before it becomes a pull request. Use after any frontend pass, before
-  opening a PR, and whenever the open question is visual rather than logical.
-  Replaces shipping a PR per look and deciding on production.
+  Runs the app on a local server and drives it in a real browser to judge
+  rendered changes before they become pull requests. Fires on a single frontend
+  pass, and equally on a batch frontier of rendered-surface branches — dogfood
+  the whole batch from one integration worktree instead of shipping a PR per
+  look. Use before opening any PR with a rendered surface, and whenever the
+  open question is visual rather than logical. Replaces deciding on production.
 ---
 
 # Dogfood local
