@@ -33,6 +33,7 @@ by hand. The install reports each missing Codex setting.
 - Linux or macOS. `install.sh` refuses anything else.
 - `git`, `python3`, `bash`. The bash 3.2 that ships with macOS is enough.
 - `node` with `npx`, for third-party skills.
+- `bun`, for the pstack `watch-pr` and `orch` tools.
 
 ## Bootstrap
 
