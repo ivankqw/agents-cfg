@@ -1,6 +1,7 @@
 name: lean
 summary: Cheaper planner and cheaper builders. Review unchanged.
 when: The plan is simple, the volume is high, and the judgement calls are small.
+harness: claude-code
 roles:
   orchestrator: { model: sonnet-5, effort: high }
   implementer:  { model: haiku-4.5, effort: default, parallel: true }

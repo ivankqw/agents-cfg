@@ -1,12 +1,14 @@
 name: single-vendor
-summary: One provider end to end, when the other has no quota left.
-when: A provider is capped or unreachable and work cannot wait.
+summary: Codex owns every role because it cannot call Claude through a plugin.
+when: Codex owns the main session, or the Claude harness is unavailable.
+harness: codex
 roles:
   orchestrator: { model: codex-sol, effort: xhigh }
   implementer:  { model: codex-sol, effort: low, parallel: true }
-  reviewer:     { model: codex-sol, effort: high, cross_vendor: false }
+  reviewer:     { model: gpt-5.5, effort: high, cross_vendor: false }
 notes: >-
-  The reviewer now shares weights with the author, so the usual independence is
-  gone. Compensate: dispatch it with no shared context, forbid it from reading
-  the author's reasoning, and require executed evidence for every finding.
-  Say in the PR that the review was single-vendor.
+  Use this config for a Codex-led stretch. The reviewer stays with the same vendor
+  but uses a different model from the author. Dispatch it with no shared context,
+  forbid it from reading the author's reasoning, and require executed evidence for
+  every finding. A claude -p subprocess can provide an external review, but it is
+  not the reviewer from deep. Say in the PR that the configured review was single-vendor.

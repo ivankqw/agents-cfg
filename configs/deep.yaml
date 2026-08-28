@@ -1,11 +1,15 @@
 name: deep
 summary: The most capable planner available. Slow and expensive on purpose.
 when: Risky diffs, data migrations, anything about to reach production.
+harness: claude-code
 roles:
   orchestrator: { model: fable-5, effort: high }
   implementer:  { model: sonnet-5, effort: high, parallel: true }
   reviewer:     { model: codex-sol, effort: high, cross_vendor: true, second_pass: opus-5-max }
 notes: >-
+  This config requires Claude Code to call Codex through the Codex plugin. Codex
+  has no reciprocal Claude plugin. Its only Claude route is a claude -p subprocess,
+  which can provide an external review but is not this configured review lane.
   Fable 5 costs twice what Opus 5 costs per token, so this config is for work
   that is hard to reverse rather than work that is merely important. Two review
   passes: one cross-vendor, one at maximum effort on the same diff.

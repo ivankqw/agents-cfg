@@ -29,12 +29,22 @@ When the fallback fires, the review is no longer cross-vendor. Say so.
 
 ## Choosing
 
-| Config | Orchestrator | Implementer | Use it when |
-|---|---|---|---|
-| `lean` | Sonnet 5 | Haiku 4.5 | The plan is simple and the volume is high. |
-| `default` | Opus 5 | Sonnet 5 | Ordinary work. |
-| `deep` | Fable 5 | Sonnet 5 | Risky diffs, migrations, anything pre-deploy. |
-| `single-vendor` | one provider throughout | | The other provider's quota is gone. The review loses cross-vendor independence, so say so out loud. |
+| Config | Harness | Orchestrator | Implementer | Reviewer | Use it when |
+|---|---|---|---|---|---|
+| `lean` | Claude Code | Sonnet 5 | Haiku 4.5 | Codex Sol | The plan is simple and the volume is high. |
+| `default` | Claude Code | Opus 5 | Sonnet 5 | Codex Sol | Ordinary work. |
+| `deep` | Claude Code | Fable 5 | Sonnet 5 | Codex Sol, then Opus 5 | Risky diffs, migrations, anything pre-deploy. |
+| `single-vendor` | Codex | Codex Sol | Codex Sol | GPT-5.5 | Codex owns the session, so cross-vendor review is unavailable. |
+
+## Harness direction is not symmetric
+
+`lean`, `default`, and `deep` assume that Claude Code owns the main session. Claude Code calls the
+Codex reviewer through the Codex plugin. This gives those configs their cross-vendor review lane.
+
+Codex has no reciprocal Claude plugin. Its only route to Claude is a `claude -p` subprocess. That
+subprocess can provide an external cross-vendor pass, but it does not supply the reviewer configured
+by `deep`. Use `single-vendor` when Codex owns the main session. If the work needs the configured
+cross-vendor review lane, start it from Claude Code and select `default` or `deep`.
 
 Cost rises strictly down that list.
 
