@@ -16,8 +16,7 @@ Step by step:
 
 ```bash
 git clone git@github.com:ivankqw/agents-cfg.git ~/agents-cfg
-~/agents-cfg/install.sh
-cd ~ && npx skills experimental_install
+~/agents-cfg/bootstrap.sh
 export PATH="$HOME/.local/bin:$PATH"   # add to your shell profile
 ```
 
@@ -44,6 +43,13 @@ managed by [`npx skills`](https://www.npmjs.com/package/skills), which keeps the
 off from `npx skills update`. This repo carries `skills-lock.json` instead, and
 `npx skills experimental_install` restores each skill at its recorded commit. Only skills I wrote
 live in `skills/`.
+
+**pstack stays pinned.** Bootstrap checks out one recorded pstack revision under
+`~/.local/share/agent-plugins`. Install links its skills into `~/.agents/skills`. It links its Codex
+prompts into `~/.codex/prompts`. It does not vendor pstack into this repo.
+
+**Codex settings stay user-owned.** Install does not edit `~/.codex/config.toml`. It reports missing
+settings. Merge `settings/codex.config.template.toml` to enable hooks, pstack, and multi-agent work.
 
 **Nothing secret.** The install writes no credential. MCP servers are declared by name and URL in
 `mcp/servers.json`; keys come from the environment, and a server whose key is missing gets skipped.
