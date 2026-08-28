@@ -8,7 +8,8 @@ roles:
   reviewer:     { model: codex-sol, effort: high, cross_vendor: true, second_pass: opus-5-max }
 notes: >-
   This config requires Claude Code to call Codex through the Codex plugin. Codex
-  has no reciprocal Claude plugin. A claude -p subprocess is not this review lane.
+  has no reciprocal Claude plugin. Its only Claude route is a claude -p subprocess,
+  which can provide an external review but is not this configured review lane.
   Fable 5 costs twice what Opus 5 costs per token, so this config is for work
   that is hard to reverse rather than work that is merely important. Two review
   passes: one cross-vendor, one at maximum effort on the same diff.

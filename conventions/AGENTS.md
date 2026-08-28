@@ -64,8 +64,9 @@ are on. When a config forces the reviewer to share the author's weights, say so 
 
 Configs are directional. `lean`, `default`, and `deep` require Claude Code as the orchestrator.
 Claude Code can call the Codex reviewer through its plugin. Codex has no reciprocal Claude plugin.
-When Codex holds the plan, use `single-vendor`. Do not treat `claude -p` as the configured reviewer.
-It starts a separate CLI process and bypasses the plugin lane.
+Its only route to Claude is a `claude -p` subprocess. That subprocess can provide an external
+cross-vendor pass, but it is not the `deep` reviewer lane. When Codex holds the plan, use
+`single-vendor`. Keep its reviewer on a different Codex model from the author.
 
 ## Review before pushing
 

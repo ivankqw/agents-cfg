@@ -1,6 +1,7 @@
 name: default
 summary: Strong planner, cheap parallel builders, cross-vendor reviewer.
 when: Ordinary day-to-day work.
+harness: claude-code
 roles:
   orchestrator: { model: opus-5, effort: medium }
   implementer:  { model: sonnet-5, effort: default, parallel: true }
