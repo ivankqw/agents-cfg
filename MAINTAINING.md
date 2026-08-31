@@ -44,6 +44,8 @@ git diff skills-lock.json
 If an imported skill must stay explicit-use-only, add or update its description override in
 `scripts/skill_metadata.py`. `install.sh` applies those overrides in `~/.agents/skills` after each
 restore or update, so Codex sees the constrained triggers.
+That script also owns the special-case `ponytail` collision handling: replace only the known broad
+upstream main skill, and stop with an operator action for any other non-symlink `ponytail` path.
 
 ## Let a skill invoke another skill
 

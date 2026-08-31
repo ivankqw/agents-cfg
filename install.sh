@@ -37,7 +37,12 @@ echo "== skills"
 # The `skills` CLI reads skills-lock.json from the CURRENT directory and installs
 # into ./.agents/skills — so running it from $HOME targets ~/.agents/skills.
 link "$AC/skills-lock.json" "$HOME/skills-lock.json"
-for d in "$AC"/skills/*/; do link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"; done
+python3 "$AC/scripts/skill_metadata.py" install-ponytail \
+  "$AC/skills/ponytail" "$SHARED_SKILLS/ponytail"
+for d in "$AC"/skills/*/; do
+  [ "$(basename "$d")" = "ponytail" ] && continue
+  link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"
+done
 [ -d "$PRIVATE/skills" ] && for d in "$PRIVATE"/skills/*/; do link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"; done
 
 PSTACK_REVISION="$(sed -n '1p' "$AC/pstack-revision.txt")"

@@ -101,6 +101,38 @@ FIXTURES = {
     ),
 }
 
+UPSTREAM_MAIN_PONYTAIL = textwrap.dedent(
+    """\
+    ---
+    name: ponytail
+    description: >
+      Forces the laziest solution that actually works, simplest, shortest, most
+      minimal. Channels a senior dev who has seen everything: question whether the
+      task needs to exist at all (YAGNI), reach for the standard library before
+      custom code, native platform features before dependencies, one line before
+      fifty. Supports intensity levels: lite, full (default), ultra. Use on ANY
+      coding task: writing, adding, refactoring, fixing, reviewing, or designing
+      code, and choosing libraries or dependencies.
+    argument-hint: "[lite|full|ultra]"
+    license: MIT
+    ---
+
+    # Ponytail
+    """
+)
+
+REPO_WRAPPER_PONYTAIL = textwrap.dedent(
+    """\
+    ---
+    name: ponytail
+    description: Use only when the user explicitly names Ponytail or asks to use the ponytail skill.
+    license: MIT
+    ---
+
+    # Ponytail
+    """
+)
+
 
 class SkillMetadataTest(unittest.TestCase):
     def create_root(self) -> pathlib.Path:
@@ -144,6 +176,40 @@ class SkillMetadataTest(unittest.TestCase):
         skill_metadata.apply_overrides(root)
 
         self.assertEqual(once, (root / "ponytail-review" / "SKILL.md").read_text())
+
+    def test_install_ponytail_quarantines_known_upstream_collision(self) -> None:
+        root = self.create_root()
+        source = root / "repo-ponytail"
+        source.mkdir()
+        (source / "SKILL.md").write_text(REPO_WRAPPER_PONYTAIL)
+        destination = root / "ponytail"
+        destination.mkdir()
+        (destination / "SKILL.md").write_text(UPSTREAM_MAIN_PONYTAIL)
+
+        skill_metadata.install_ponytail(source, destination)
+
+        self.assertTrue(destination.is_symlink())
+        self.assertEqual(destination.resolve(), source.resolve())
+        archived = root / "ponytail.upstream-disabled"
+        self.assertTrue(archived.is_dir())
+        self.assertIn("Use on ANY", (archived / "SKILL.md").read_text())
+
+    def test_install_ponytail_refuses_unknown_collision(self) -> None:
+        root = self.create_root()
+        source = root / "repo-ponytail"
+        source.mkdir()
+        (source / "SKILL.md").write_text(REPO_WRAPPER_PONYTAIL)
+        destination = root / "ponytail"
+        destination.mkdir()
+        (destination / "SKILL.md").write_text(
+            "---\nname: ponytail\ndescription: custom local content\n---\n"
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "refusing to replace non-symlink ponytail path"):
+            skill_metadata.install_ponytail(source, destination)
+
+        self.assertTrue(destination.is_dir())
+        self.assertFalse(destination.is_symlink())
 
 
 if __name__ == "__main__":
