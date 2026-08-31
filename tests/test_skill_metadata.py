@@ -185,14 +185,19 @@ class SkillMetadataTest(unittest.TestCase):
         destination = root / "ponytail"
         destination.mkdir()
         (destination / "SKILL.md").write_text(UPSTREAM_MAIN_PONYTAIL)
+        disabled_root = root.parent / "skills-disabled"
 
-        skill_metadata.install_ponytail(source, destination)
+        skill_metadata.install_ponytail(source, destination, disabled_root)
 
         self.assertTrue(destination.is_symlink())
         self.assertEqual(destination.resolve(), source.resolve())
-        archived = root / "ponytail.upstream-disabled"
+        archived = disabled_root / "ponytail.upstream-disabled"
         self.assertTrue(archived.is_dir())
         self.assertIn("Use on ANY", (archived / "SKILL.md").read_text())
+        self.assertEqual(oct(disabled_root.stat().st_mode & 0o777), "0o700")
+        self.assertFalse(
+            any("upstream-disabled" in str(path.relative_to(root)) for path in root.rglob("SKILL.md"))
+        )
 
     def test_install_ponytail_refuses_unknown_collision(self) -> None:
         root = self.create_root()
@@ -204,9 +209,10 @@ class SkillMetadataTest(unittest.TestCase):
         (destination / "SKILL.md").write_text(
             "---\nname: ponytail\ndescription: custom local content\n---\n"
         )
+        disabled_root = root.parent / "skills-disabled"
 
         with self.assertRaisesRegex(RuntimeError, "refusing to replace non-symlink ponytail path"):
-            skill_metadata.install_ponytail(source, destination)
+            skill_metadata.install_ponytail(source, destination, disabled_root)
 
         self.assertTrue(destination.is_dir())
         self.assertFalse(destination.is_symlink())

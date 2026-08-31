@@ -152,7 +152,8 @@ persistent state. It does not enable the upstream `full` mode.
 Install rewrites the imported frontmatter descriptions after each restore or update, so Codex sees
 explicit-request triggers only.
 If an old non-symlink upstream `ponytail` directory blocks the repo wrapper, install quarantines
-that known directory and replaces it. Any other `ponytail` collision stops with an operator action.
+that known directory into `~/.agents/skills-disabled/` and replaces it. Any other `ponytail`
+collision stops with an operator action.
 
 Treat complexity metrics as review guidance. Project limits and measured behavior take precedence
 over generic thresholds. Existing acceptance, verification, security, accessibility, and operator

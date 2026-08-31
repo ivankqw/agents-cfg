@@ -109,19 +109,27 @@ def looks_like_upstream_main_ponytail(path: pathlib.Path) -> bool:
     return all(anchor in text for anchor in UPSTREAM_MAIN_PONYTAIL_ANCHORS)
 
 
-def quarantine_path(path: pathlib.Path) -> pathlib.Path:
-    stem = path.with_name(path.name + ".upstream-disabled")
+def ensure_disabled_root(path: pathlib.Path) -> None:
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path.chmod(0o700)
+
+
+def quarantine_path(disabled_root: pathlib.Path, name: str) -> pathlib.Path:
+    ensure_disabled_root(disabled_root)
+    stem = disabled_root / f"{name}.upstream-disabled"
     if not stem.exists():
         return stem
     index = 1
     while True:
-        candidate = path.with_name(f"{path.name}.upstream-disabled.{index}")
+        candidate = disabled_root / f"{name}.upstream-disabled.{index}"
         if not candidate.exists():
             return candidate
         index += 1
 
 
-def install_ponytail(source: pathlib.Path, destination: pathlib.Path) -> list[str]:
+def install_ponytail(
+    source: pathlib.Path, destination: pathlib.Path, disabled_root: pathlib.Path
+) -> list[str]:
     if not source.exists():
         raise FileNotFoundError(f"missing ponytail source: {source}")
 
@@ -139,7 +147,7 @@ def install_ponytail(source: pathlib.Path, destination: pathlib.Path) -> list[st
         return [f"ponytail: linked {destination} -> {source}"]
 
     if destination.is_dir() and looks_like_upstream_main_ponytail(destination):
-        archived = quarantine_path(destination)
+        archived = quarantine_path(disabled_root, destination.name)
         shutil.move(str(destination), str(archived))
         destination.symlink_to(source)
         return [
@@ -192,12 +200,19 @@ def main(argv: list[str]) -> int:
     parser.add_argument("command", choices=("apply", "check", "install-ponytail"))
     parser.add_argument("path1")
     parser.add_argument("path2", nargs="?")
+    parser.add_argument("path3", nargs="?")
     args = parser.parse_args(argv)
 
     if args.command == "install-ponytail":
-        if args.path2 is None:
-            parser.error("install-ponytail requires source and destination")
-        emit(install_ponytail(pathlib.Path(args.path1), pathlib.Path(args.path2)))
+        if args.path2 is None or args.path3 is None:
+            parser.error("install-ponytail requires source, destination, and disabled-root")
+        emit(
+            install_ponytail(
+                pathlib.Path(args.path1),
+                pathlib.Path(args.path2),
+                pathlib.Path(args.path3),
+            )
+        )
         return 0
 
     root = pathlib.Path(args.path1)

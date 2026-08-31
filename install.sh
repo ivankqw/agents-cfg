@@ -20,9 +20,11 @@ PRIVATE="${PRIVATE_CONFIG:-$HOME/agents-cfg-private}"
 CLAUDE_DIR="$HOME/.claude"
 CODEX_DIR="$HOME/.codex"
 SHARED_SKILLS="$HOME/.agents/skills"
+DISABLED_SKILLS="$HOME/.agents/skills-disabled"
 PSTACK_DIR="${PSTACK_DIR:-$HOME/.local/share/agent-plugins/pstack-claude}"
 BIN="$HOME/.local/bin"
-mkdir -p "$CLAUDE_DIR"/{skills,agents,hooks} "$CODEX_DIR"/{hooks,prompts} "$SHARED_SKILLS" "$BIN"
+mkdir -p "$CLAUDE_DIR"/{skills,agents,hooks} "$CODEX_DIR"/{hooks,prompts} "$SHARED_SKILLS" "$DISABLED_SKILLS" "$BIN"
+chmod 700 "$SHARED_SKILLS" "$DISABLED_SKILLS"
 
 link() { # link <target> <linkname>
   [ -e "$1" ] || return 0
@@ -38,7 +40,7 @@ echo "== skills"
 # into ./.agents/skills — so running it from $HOME targets ~/.agents/skills.
 link "$AC/skills-lock.json" "$HOME/skills-lock.json"
 python3 "$AC/scripts/skill_metadata.py" install-ponytail \
-  "$AC/skills/ponytail" "$SHARED_SKILLS/ponytail"
+  "$AC/skills/ponytail" "$SHARED_SKILLS/ponytail" "$DISABLED_SKILLS"
 for d in "$AC"/skills/*/; do
   [ "$(basename "$d")" = "ponytail" ] && continue
   link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"
