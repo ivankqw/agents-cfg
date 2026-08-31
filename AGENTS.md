@@ -79,10 +79,12 @@ multi-agent pstack panels. It does not replace user settings.
 
 ```bash
 cd ~/agents-cfg && git pull     # conventions and my own skills take effect at once
-npx skills update               # move third-party skills to their latest versions
+./bin/skills-update             # run npx skills update, then reapply and check safety metadata
 ```
 
-`npx skills update` refreshes the installed skills and rewrites the CLI's own global lockfile at
+`./bin/skills-update` refreshes the installed skills with `npx skills update`, then immediately
+reapplies the explicit-use metadata and checks that every expected skill is present. It rewrites the
+CLI's own global lockfile at
 `~/.agents/.skill-lock.json`. It does not touch this repo, so `skills-lock.json` here goes stale
 without telling you. Refresh it when you want to keep an update:
 

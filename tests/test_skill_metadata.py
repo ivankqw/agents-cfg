@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import pathlib
+import re
+import shutil
 import tempfile
 import textwrap
 import unittest
@@ -133,6 +137,15 @@ REPO_WRAPPER_PONYTAIL = textwrap.dedent(
     """
 )
 
+EXPECTED_OVERRIDE_NAMES = (
+    "cyclomatic-complexity",
+    "ponytail-audit",
+    "ponytail-debt",
+    "ponytail-gain",
+    "ponytail-help",
+    "ponytail-review",
+)
+
 
 class SkillMetadataTest(unittest.TestCase):
     def create_root(self) -> pathlib.Path:
@@ -145,13 +158,72 @@ class SkillMetadataTest(unittest.TestCase):
             (skill_dir / "SKILL.md").write_text(content)
         return root
 
+    def disabled_root_for(self, active_root: pathlib.Path) -> pathlib.Path:
+        disabled_root = active_root.parent / f"{active_root.name}-skills-disabled"
+        self.addCleanup(lambda: shutil.rmtree(disabled_root, ignore_errors=True))
+        return disabled_root
+
     def test_check_fails_for_broad_descriptions(self) -> None:
         root = self.create_root()
 
         self.assertEqual(
             sorted(skill_metadata.check_overrides(root)),
-            sorted(FIXTURES),
+            sorted(f"{name}: broad or mismatched description" for name in FIXTURES),
         )
+
+    def test_check_fails_for_missing_root(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        missing = pathlib.Path(tempdir.name) / "misspelled-skills-root"
+
+        self.assertEqual(
+            skill_metadata.check_overrides(missing),
+            [f"missing skill root: {missing}"],
+        )
+
+    def test_check_fails_for_missing_expected_skill(self) -> None:
+        root = self.create_root()
+        missing = root / "ponytail-review"
+        for path in sorted(missing.iterdir()):
+            path.unlink()
+        missing.rmdir()
+
+        self.assertIn(
+            "ponytail-review: missing expected skill",
+            skill_metadata.check_overrides(root),
+        )
+
+    def test_cli_check_does_not_print_success_for_missing_skill(self) -> None:
+        root = self.create_root()
+        missing = root / "ponytail-review"
+        for path in sorted(missing.iterdir()):
+            path.unlink()
+        missing.rmdir()
+        stdout = io.StringIO()
+
+        with contextlib.redirect_stdout(stdout):
+            rc = skill_metadata.main(["check", str(root)])
+
+        self.assertEqual(rc, 1)
+        self.assertIn("ponytail-review: missing expected skill", stdout.getvalue())
+        self.assertNotIn("explicit-use description", stdout.getvalue())
+
+    def test_override_descriptions_require_explicit_user_invocation_for_every_skill(self) -> None:
+        self.assertEqual(
+            set(skill_metadata.EXPLICIT_USE_DESCRIPTIONS),
+            set(EXPECTED_OVERRIDE_NAMES),
+        )
+        for name in EXPECTED_OVERRIDE_NAMES:
+            description = skill_metadata.EXPLICIT_USE_DESCRIPTIONS[name]
+            self.assertIn("Use only when the user explicitly names", description, name)
+            self.assertRegex(
+                description,
+                rf"asks to use (the )?{re.escape(name)} skill",
+                name,
+            )
+            self.assertIn("Do not invoke it for ordinary", description, name)
+            self.assertNotIn("Use whenever", description, name)
+            self.assertNotIn("Use on ANY", description, name)
 
     def test_apply_rewrites_descriptions_and_preserves_body(self) -> None:
         root = self.create_root()
@@ -185,7 +257,7 @@ class SkillMetadataTest(unittest.TestCase):
         destination = root / "ponytail"
         destination.mkdir()
         (destination / "SKILL.md").write_text(UPSTREAM_MAIN_PONYTAIL)
-        disabled_root = root.parent / "skills-disabled"
+        disabled_root = self.disabled_root_for(root)
 
         skill_metadata.install_ponytail(source, destination, disabled_root)
 
@@ -199,6 +271,45 @@ class SkillMetadataTest(unittest.TestCase):
             any("upstream-disabled" in str(path.relative_to(root)) for path in root.rglob("SKILL.md"))
         )
 
+    def test_legacy_upstream_quarantine_dirs_move_out_of_active_skill_root(self) -> None:
+        root = self.create_root()
+        legacy = root / "ponytail.upstream-disabled.7"
+        legacy.mkdir()
+        (legacy / "SKILL.md").write_text(UPSTREAM_MAIN_PONYTAIL)
+        current_source_bytes = b"current source payload\n"
+        (legacy / "payload.bin").write_bytes(current_source_bytes)
+        disabled_root = self.disabled_root_for(root)
+
+        messages = skill_metadata.migrate_legacy_ponytail_quarantines(root, disabled_root)
+
+        archived = disabled_root / "ponytail.upstream-disabled.7"
+        self.assertFalse(legacy.exists())
+        self.assertTrue(archived.is_dir())
+        self.assertEqual((archived / "payload.bin").read_bytes(), current_source_bytes)
+        self.assertIn("Use on ANY", (archived / "SKILL.md").read_text())
+        self.assertEqual(
+            messages,
+            [f"ponytail: moved legacy quarantine {legacy} to {archived}"],
+        )
+        self.assertFalse(
+            any(path.name.startswith("ponytail.upstream-disabled") for path in root.iterdir())
+        )
+
+    def test_legacy_quarantine_refuses_unknown_contents(self) -> None:
+        root = self.create_root()
+        legacy = root / "ponytail.upstream-disabled"
+        legacy.mkdir()
+        (legacy / "SKILL.md").write_text(
+            "---\nname: ponytail\ndescription: custom local content\n---\n"
+        )
+        disabled_root = self.disabled_root_for(root)
+
+        with self.assertRaisesRegex(RuntimeError, "unknown legacy ponytail quarantine"):
+            skill_metadata.migrate_legacy_ponytail_quarantines(root, disabled_root)
+
+        self.assertTrue(legacy.is_dir())
+        self.assertFalse(disabled_root.exists())
+
     def test_install_ponytail_refuses_unknown_collision(self) -> None:
         root = self.create_root()
         source = root / "repo-ponytail"
@@ -209,13 +320,35 @@ class SkillMetadataTest(unittest.TestCase):
         (destination / "SKILL.md").write_text(
             "---\nname: ponytail\ndescription: custom local content\n---\n"
         )
-        disabled_root = root.parent / "skills-disabled"
+        disabled_root = self.disabled_root_for(root)
 
         with self.assertRaisesRegex(RuntimeError, "refusing to replace non-symlink ponytail path"):
             skill_metadata.install_ponytail(source, destination, disabled_root)
 
         self.assertTrue(destination.is_dir())
         self.assertFalse(destination.is_symlink())
+
+    def test_update_wrapper_reapplies_and_checks_metadata_after_npx_update(self) -> None:
+        wrapper = ROOT / "bin" / "skills-update"
+
+        text = wrapper.read_text()
+
+        self.assertIn("npx skills update", text)
+        self.assertIsNotNone(
+            re.search(
+                r"npx skills update.*skill_metadata\.py\" apply.*skill_metadata\.py\" check",
+                text,
+                re.S,
+            )
+        )
+
+    def test_install_moves_legacy_quarantines_before_claude_skill_links(self) -> None:
+        text = (ROOT / "install.sh").read_text()
+
+        migrate = text.index("migrate-ponytail-quarantine")
+        claude_links = text.index('for d in "$SHARED_SKILLS"/*/; do link')
+
+        self.assertLess(migrate, claude_links)
 
 
 if __name__ == "__main__":

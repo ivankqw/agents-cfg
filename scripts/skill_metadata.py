@@ -30,7 +30,8 @@ EXPLICIT_USE_DESCRIPTIONS = {
     "ponytail-gain": (
         "Use only when the user explicitly names Ponytail gain or asks to use "
         "the ponytail-gain skill. Treat benchmark figures as upstream sourced "
-        "data, not current-repository measurements."
+        "data, not current-repository measurements. Do not invoke it for "
+        "ordinary metrics, benchmarking, performance, or reporting requests."
     ),
     "ponytail-help": (
         "Use only when the user explicitly names Ponytail help or asks to use "
@@ -127,6 +128,46 @@ def quarantine_path(disabled_root: pathlib.Path, name: str) -> pathlib.Path:
         index += 1
 
 
+def legacy_quarantine_path(disabled_root: pathlib.Path, name: str) -> pathlib.Path:
+    ensure_disabled_root(disabled_root)
+    candidate = disabled_root / name
+    if not candidate.exists():
+        return candidate
+    index = 1
+    while True:
+        candidate = disabled_root / f"{name}.{index}"
+        if not candidate.exists():
+            return candidate
+        index += 1
+
+
+def migrate_legacy_ponytail_quarantines(
+    active_root: pathlib.Path, disabled_root: pathlib.Path
+) -> list[str]:
+    if not active_root.is_dir():
+        raise FileNotFoundError(f"missing active skill root: {active_root}")
+
+    candidates = sorted(
+        path
+        for path in active_root.iterdir()
+        if path.name == "ponytail.upstream-disabled"
+        or path.name.startswith("ponytail.upstream-disabled.")
+    )
+    for path in candidates:
+        if not path.is_dir() or path.is_symlink() or not looks_like_upstream_main_ponytail(path):
+            raise RuntimeError(
+                "unknown legacy ponytail quarantine "
+                f"{path}. Move it aside manually before install can link Claude skills."
+            )
+
+    results: list[str] = []
+    for path in candidates:
+        archived = legacy_quarantine_path(disabled_root, path.name)
+        shutil.move(str(path), str(archived))
+        results.append(f"ponytail: moved legacy quarantine {path} to {archived}")
+    return results
+
+
 def install_ponytail(
     source: pathlib.Path, destination: pathlib.Path, disabled_root: pathlib.Path
 ) -> list[str]:
@@ -179,15 +220,18 @@ def apply_overrides(root: pathlib.Path) -> list[str]:
 
 
 def check_overrides(root: pathlib.Path) -> list[str]:
-    mismatches: list[str] = []
+    problems: list[str] = []
+    if not root.is_dir():
+        return [f"missing skill root: {root}"]
     for name, description in EXPLICIT_USE_DESCRIPTIONS.items():
         path = skill_file(root, name)
-        if not path.exists():
+        if not path.is_file():
+            problems.append(f"{name}: missing expected skill")
             continue
         actual = replace_description(path.read_text(), description)
         if actual != path.read_text():
-            mismatches.append(name)
-    return mismatches
+            problems.append(f"{name}: broad or mismatched description")
+    return problems
 
 
 def emit(lines: Iterable[str]) -> None:
@@ -197,7 +241,10 @@ def emit(lines: Iterable[str]) -> None:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("apply", "check", "install-ponytail"))
+    parser.add_argument(
+        "command",
+        choices=("apply", "check", "install-ponytail", "migrate-ponytail-quarantine"),
+    )
     parser.add_argument("path1")
     parser.add_argument("path2", nargs="?")
     parser.add_argument("path3", nargs="?")
@@ -215,15 +262,26 @@ def main(argv: list[str]) -> int:
         )
         return 0
 
+    if args.command == "migrate-ponytail-quarantine":
+        if args.path2 is None:
+            parser.error("migrate-ponytail-quarantine requires active-root and disabled-root")
+        emit(
+            migrate_legacy_ponytail_quarantines(
+                pathlib.Path(args.path1),
+                pathlib.Path(args.path2),
+            )
+        )
+        return 0
+
     root = pathlib.Path(args.path1)
 
     if args.command == "apply":
         emit(apply_overrides(root))
         return 0
 
-    mismatches = check_overrides(root)
-    if mismatches:
-        emit(f"{name}: broad or mismatched description" for name in mismatches)
+    problems = check_overrides(root)
+    if problems:
+        emit(problems)
         return 1
     emit(f"{name}: explicit-use description" for name in EXPLICIT_USE_DESCRIPTIONS)
     return 0

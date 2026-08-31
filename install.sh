@@ -41,6 +41,8 @@ echo "== skills"
 link "$AC/skills-lock.json" "$HOME/skills-lock.json"
 python3 "$AC/scripts/skill_metadata.py" install-ponytail \
   "$AC/skills/ponytail" "$SHARED_SKILLS/ponytail" "$DISABLED_SKILLS"
+python3 "$AC/scripts/skill_metadata.py" migrate-ponytail-quarantine \
+  "$SHARED_SKILLS" "$DISABLED_SKILLS"
 for d in "$AC"/skills/*/; do
   [ "$(basename "$d")" = "ponytail" ] && continue
   link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"
@@ -124,6 +126,7 @@ done
 
 echo "== constraining explicit-use third-party skill triggers"
 python3 "$AC/scripts/skill_metadata.py" apply "$SHARED_SKILLS"
+python3 "$AC/scripts/skill_metadata.py" check "$SHARED_SKILLS"
 
 for d in "$SHARED_SKILLS"/*/; do link "${d%/}" "$CLAUDE_DIR/skills/$(basename "$d")"; done
 

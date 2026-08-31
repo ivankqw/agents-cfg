@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Update third-party skills, then immediately restore this repo's safety metadata.
+set -euo pipefail
+
+SCRIPT="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT" ]; do
+  DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
+  TARGET="$(readlink "$SCRIPT")"
+  case "$TARGET" in
+    /*) SCRIPT="$TARGET" ;;
+    *) SCRIPT="$DIR/$TARGET" ;;
+  esac
+done
+AC="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
+SHARED_SKILLS="${SHARED_SKILLS:-$HOME/.agents/skills}"
+DISABLED_SKILLS="${DISABLED_SKILLS:-$HOME/.agents/skills-disabled}"
+
+mkdir -p "$SHARED_SKILLS" "$DISABLED_SKILLS"
+chmod 700 "$SHARED_SKILLS" "$DISABLED_SKILLS"
+ln -sfn "$AC/skills-lock.json" "$HOME/skills-lock.json"
+
+( cd "$HOME" && npx skills update )
+
+python3 "$AC/scripts/skill_metadata.py" migrate-ponytail-quarantine "$SHARED_SKILLS" "$DISABLED_SKILLS"
+python3 "$AC/scripts/skill_metadata.py" install-ponytail \
+  "$AC/skills/ponytail" "$SHARED_SKILLS/ponytail" "$DISABLED_SKILLS"
+python3 "$AC/scripts/skill_metadata.py" apply "$SHARED_SKILLS"
+python3 "$AC/scripts/skill_metadata.py" check "$SHARED_SKILLS"
