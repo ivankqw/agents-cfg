@@ -25,37 +25,13 @@ PSTACK_DIR="${PSTACK_DIR:-$HOME/.local/share/agent-plugins/pstack-claude}"
 BIN="$HOME/.local/bin"
 LOCK="$HOME/skills-lock.json"
 
-python3 "$AC/scripts/skill_metadata.py" preflight-lock "$AC/skills-lock.json" "$LOCK"
-
-PSTACK_REVISION="$(sed -n '1p' "$AC/pstack-revision.txt")"
-if ! printf '%s\n' "$PSTACK_REVISION" | grep -Eq '^[0-9a-f]{40}$'; then
-  echo "invalid pstack revision in $AC/pstack-revision.txt" >&2; exit 1
-fi
-if [ ! -d "$PSTACK_DIR/.git" ]; then
-  echo "pstack checkout is missing: $PSTACK_DIR" >&2
-  echo "run $AC/bootstrap.sh, or clone the pinned checkout first" >&2
-  exit 1
-fi
+python3 "$AC/scripts/skill_metadata.py" preflight-install \
+  "$AC/skills-lock.json" "$LOCK" "$PSTACK_DIR" "$AC/pstack-revision.txt" \
+  "$SHARED_SKILLS" "$AC/skills/ponytail" "$PRIVATE"
 PSTACK_RESOLVED="$(cd "$PSTACK_DIR" && pwd -P)"
-PSTACK_ACTUAL="$(git -C "$PSTACK_DIR" rev-parse HEAD)"
-if [ "$PSTACK_ACTUAL" != "$PSTACK_REVISION" ]; then
-  echo "pstack revision mismatch: expected $PSTACK_REVISION, found $PSTACK_ACTUAL" >&2
-  exit 1
-fi
-if [ -n "$(git -C "$PSTACK_DIR" status --porcelain)" ]; then
-  echo "pstack checkout has local changes; leaving it unchanged: $PSTACK_DIR" >&2
-  exit 1
-fi
-if [ ! -d "$PSTACK_DIR/plugins/pstack/skills" ] || \
-   [ ! -d "$PSTACK_DIR/plugins/pstack/.codex-plugin/prompts" ]; then
-  echo "pstack checkout does not contain the expected plugin layout: $PSTACK_DIR" >&2
-  exit 1
-fi
 PSTACK_SKILLS="$PSTACK_RESOLVED/plugins/pstack/skills"
 PSTACK_PROMPTS="$PSTACK_RESOLVED/plugins/pstack/.codex-plugin/prompts"
 
-python3 "$AC/scripts/skill_metadata.py" preflight-ponytail "$AC/skills/ponytail" "$SHARED_SKILLS"
-python3 "$AC/scripts/skill_metadata.py" preflight-private-ponytail "$PRIVATE"
 mkdir -p "$CLAUDE_DIR"/{skills,agents,hooks} "$CODEX_DIR"/{hooks,prompts} "$SHARED_SKILLS" "$DISABLED_SKILLS" "$BIN"
 chmod 700 "$SHARED_SKILLS" "$DISABLED_SKILLS"
 

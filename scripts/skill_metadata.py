@@ -9,6 +9,7 @@ import os
 import pathlib
 import re
 import shutil
+import subprocess
 import sys
 from typing import Iterable
 
@@ -104,6 +105,8 @@ def symlink_target(path: pathlib.Path) -> pathlib.Path:
 
 
 def validate_lock(repo_lock: pathlib.Path, home_lock: pathlib.Path) -> list[str]:
+    if not repo_lock.is_file():
+        raise FileNotFoundError(f"missing repo skills lock: {repo_lock}")
     desired = repo_lock.resolve(strict=False)
     if home_lock.is_symlink():
         current = symlink_target(home_lock).resolve(strict=False)
@@ -252,6 +255,65 @@ def validate_no_private_ponytail(private_root: pathlib.Path) -> list[str]:
     return [f"ponytail: no private override at {private_ponytail}"]
 
 
+def read_pstack_revision(revision_file: pathlib.Path) -> str:
+    lines = revision_file.read_text().splitlines()
+    revision = lines[0] if lines else ""
+    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise RuntimeError(f"invalid pstack revision in {revision_file}")
+    return revision
+
+
+def git_stdout(args: list[str]) -> str:
+    if args and args[0] == "git":
+        args = [os.environ.get("GIT", "git"), *args[1:]]
+    try:
+        result = subprocess.run(args, text=True, capture_output=True, check=False)
+    except OSError as error:
+        raise RuntimeError(f"git command failed: {error}") from error
+    if result.returncode != 0:
+        output = (result.stderr + result.stdout).strip()
+        detail = f": {output}" if output else ""
+        raise RuntimeError(f"git command failed{detail}")
+    return result.stdout
+
+
+def validate_pstack_checkout(pstack_dir: pathlib.Path, revision_file: pathlib.Path) -> list[str]:
+    revision = read_pstack_revision(revision_file)
+    if not (pstack_dir / ".git").is_dir():
+        raise RuntimeError(f"pstack checkout is missing: {pstack_dir}")
+
+    actual = git_stdout(["git", "-C", str(pstack_dir), "rev-parse", "HEAD"]).strip()
+    if actual != revision:
+        raise RuntimeError(f"pstack revision mismatch: expected {revision}, found {actual}")
+
+    status = git_stdout(["git", "-C", str(pstack_dir), "status", "--porcelain"])
+    if status:
+        raise RuntimeError(f"pstack checkout has local changes; leaving it unchanged: {pstack_dir}")
+
+    if not (pstack_dir / "plugins" / "pstack" / "skills").is_dir() or not (
+        pstack_dir / "plugins" / "pstack" / ".codex-plugin" / "prompts"
+    ).is_dir():
+        raise RuntimeError(f"pstack checkout does not contain the expected plugin layout: {pstack_dir}")
+
+    return [f"pstack: checkout preflight ok at {pstack_dir}"]
+
+
+def validate_install_preflight(
+    repo_lock: pathlib.Path,
+    home_lock: pathlib.Path,
+    pstack_dir: pathlib.Path,
+    pstack_revision_file: pathlib.Path,
+    active_root: pathlib.Path,
+    ponytail_source: pathlib.Path,
+    private_root: pathlib.Path,
+) -> list[str]:
+    results = validate_lock(repo_lock, home_lock)
+    results.extend(validate_pstack_checkout(pstack_dir, pstack_revision_file))
+    results.extend(validate_ponytail_preflight(ponytail_source, active_root))
+    results.extend(validate_no_private_ponytail(private_root))
+    return results
+
+
 def install_ponytail(
     source: pathlib.Path, destination: pathlib.Path, disabled_root: pathlib.Path
 ) -> list[str]:
@@ -357,70 +419,89 @@ def main(argv: list[str]) -> int:
             "install-lock",
             "install-ponytail",
             "migrate-ponytail-quarantine",
+            "preflight-install",
             "preflight-lock",
             "preflight-ponytail",
             "preflight-private-ponytail",
             "unlock",
         ),
     )
-    parser.add_argument("path1")
-    parser.add_argument("path2", nargs="?")
-    parser.add_argument("path3", nargs="?")
+    parser.add_argument("paths", nargs="*")
     args = parser.parse_args(argv)
+
+    def require_paths(count: int, usage: str) -> list[pathlib.Path]:
+        if len(args.paths) != count:
+            parser.error(usage)
+        return [pathlib.Path(value) for value in args.paths]
 
     try:
         if args.command == "preflight-lock":
-            if args.path2 is None:
-                parser.error("preflight-lock requires repo-lock and home-lock")
-            emit(validate_lock(pathlib.Path(args.path1), pathlib.Path(args.path2)))
+            repo_lock, home_lock = require_paths(2, "preflight-lock requires repo-lock and home-lock")
+            emit(validate_lock(repo_lock, home_lock))
             return 0
 
         if args.command == "install-lock":
-            if args.path2 is None:
-                parser.error("install-lock requires repo-lock and home-lock")
-            emit(install_lock(pathlib.Path(args.path1), pathlib.Path(args.path2)))
+            repo_lock, home_lock = require_paths(2, "install-lock requires repo-lock and home-lock")
+            emit(install_lock(repo_lock, home_lock))
             return 0
 
         if args.command == "preflight-ponytail":
-            if args.path2 is None:
-                parser.error("preflight-ponytail requires source and active-root")
-            emit(validate_ponytail_preflight(pathlib.Path(args.path1), pathlib.Path(args.path2)))
+            source, active_root = require_paths(2, "preflight-ponytail requires source and active-root")
+            emit(validate_ponytail_preflight(source, active_root))
             return 0
 
         if args.command == "preflight-private-ponytail":
-            emit(validate_no_private_ponytail(pathlib.Path(args.path1)))
+            (private_root,) = require_paths(1, "preflight-private-ponytail requires private-root")
+            emit(validate_no_private_ponytail(private_root))
+            return 0
+
+        if args.command == "preflight-install":
+            (
+                repo_lock,
+                home_lock,
+                pstack_dir,
+                pstack_revision_file,
+                active_root,
+                ponytail_source,
+                private_root,
+            ) = require_paths(
+                7,
+                "preflight-install requires repo-lock, home-lock, pstack-dir, "
+                "revision-file, active-root, ponytail-source, and private-root",
+            )
+            emit(
+                validate_install_preflight(
+                    repo_lock,
+                    home_lock,
+                    pstack_dir,
+                    pstack_revision_file,
+                    active_root,
+                    ponytail_source,
+                    private_root,
+                )
+            )
             return 0
 
         if args.command == "install-ponytail":
-            if args.path2 is None or args.path3 is None:
-                parser.error("install-ponytail requires source, destination, and disabled-root")
-            emit(
-                install_ponytail(
-                    pathlib.Path(args.path1),
-                    pathlib.Path(args.path2),
-                    pathlib.Path(args.path3),
-                )
+            source, destination, disabled_root = require_paths(
+                3, "install-ponytail requires source, destination, and disabled-root"
             )
+            emit(install_ponytail(source, destination, disabled_root))
             return 0
 
         if args.command == "migrate-ponytail-quarantine":
-            if args.path2 is None:
-                parser.error("migrate-ponytail-quarantine requires active-root and disabled-root")
-            emit(
-                migrate_legacy_ponytail_quarantines(
-                    pathlib.Path(args.path1),
-                    pathlib.Path(args.path2),
-                )
+            active_root, disabled_root = require_paths(
+                2, "migrate-ponytail-quarantine requires active-root and disabled-root"
             )
+            emit(migrate_legacy_ponytail_quarantines(active_root, disabled_root))
             return 0
 
         if args.command == "unlock":
-            if args.path2 is None:
-                parser.error("unlock requires unlock-file and skill-root")
-            emit(unlock_skills(pathlib.Path(args.path1), pathlib.Path(args.path2)))
+            unlock_file, root = require_paths(2, "unlock requires unlock-file and skill-root")
+            emit(unlock_skills(unlock_file, root))
             return 0
 
-        root = pathlib.Path(args.path1)
+        (root,) = require_paths(1, f"{args.command} requires skill-root")
 
         if args.command == "apply":
             emit(apply_overrides(root))

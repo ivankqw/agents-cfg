@@ -168,22 +168,30 @@ class SkillMetadataTest(unittest.TestCase):
     def write_fake_git(self, fakebin: pathlib.Path, revision: str) -> None:
         git = fakebin / "git"
         git.write_text(
-            textwrap.dedent(
-                """\
-                #!/usr/bin/env bash
-                set -euo pipefail
-                printf '%s\n' "$*" >> "$HOME/git.args"
-                if [ "$1" = "-C" ] && [ "$3" = "rev-parse" ] && [ "$4" = "HEAD" ]; then
-                  printf '%s\n' "$FAKE_PSTACK_REVISION"
-                  exit 0
-                fi
-                if [ "$1" = "-C" ] && [ "$3" = "status" ] && [ "$4" = "--porcelain" ]; then
-                  exit 0
-                fi
-                printf 'unexpected git args: %s\n' "$*" >&2
-                exit 97
-                """
-            )
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "printf '%s\\n' \"$*\" >> \"$HOME/git.args\"\n"
+            "if [ \"$1\" = \"-C\" ] && [ \"$3\" = \"pull\" ] && [ \"$4\" = \"--ff-only\" ]; then\n"
+            "  exit 0\n"
+            "fi\n"
+            "if [ \"$1\" = \"-C\" ] && [ \"$3\" = \"rev-parse\" ] && [ \"$4\" = \"HEAD\" ]; then\n"
+            "  printf '%s\\n' \"$FAKE_PSTACK_REVISION\"\n"
+            "  exit 0\n"
+            "fi\n"
+            "if [ \"$1\" = \"-C\" ] && [ \"$3\" = \"status\" ] && [ \"$4\" = \"--porcelain\" ]; then\n"
+            "  exit 0\n"
+            "fi\n"
+            "if [ \"$1\" = \"-C\" ] && [ \"$3\" = \"fetch\" ]; then\n"
+            "  exit 0\n"
+            "fi\n"
+            "if [ \"$1\" = \"-C\" ] && [ \"$3\" = \"cat-file\" ]; then\n"
+            "  exit 0\n"
+            "fi\n"
+            "if [ \"$1\" = \"-C\" ] && [ \"$3\" = \"checkout\" ]; then\n"
+            "  exit 0\n"
+            "fi\n"
+            "printf 'unexpected git args: %s\\n' \"$*\" >&2\n"
+            "exit 97\n"
         )
         git.chmod(0o755)
         self.assertEqual(len(revision), 40)
@@ -207,6 +215,38 @@ class SkillMetadataTest(unittest.TestCase):
             skill_dir.mkdir(parents=True, exist_ok=True)
             (skill_dir / "SKILL.md").write_text(content)
 
+    def write_partial_failure_npx(self, fakebin: pathlib.Path, status: int) -> None:
+        npx = fakebin / "npx"
+        npx.write_text(
+            textwrap.dedent(
+                f"""\
+                #!/usr/bin/env bash
+                set -euo pipefail
+                printf '%s\n' "$*" > "$HOME/npx.args"
+                mkdir -p "$HOME/.agents/skills/ponytail-review" "$HOME/.agents/skills/wayfinder"
+                printf '%s\n' \\
+                  '---' \\
+                  'name: ponytail-review' \\
+                  'description: Use whenever code needs review.' \\
+                  '---' \\
+                  '' \\
+                  '# Ponytail Review' \\
+                  > "$HOME/.agents/skills/ponytail-review/SKILL.md"
+                printf '%s\n' \\
+                  '---' \\
+                  'name: wayfinder' \\
+                  'description: Find a route through unfamiliar code.' \\
+                  'disable-model-invocation: true' \\
+                  '---' \\
+                  '' \\
+                  '# Wayfinder' \\
+                  > "$HOME/.agents/skills/wayfinder/SKILL.md"
+                exit {status}
+                """
+            )
+        )
+        npx.chmod(0o755)
+
     def base_runtime_env(
         self,
         home: pathlib.Path,
@@ -221,6 +261,7 @@ class SkillMetadataTest(unittest.TestCase):
         env["PRIVATE_CONFIG"] = str(private or (home.parent / "missing-private"))
         env["PSTACK_DIR"] = str(pstack or (home.parent / "missing-pstack"))
         env["FAKE_PSTACK_REVISION"] = revision
+        env["GIT"] = str(fakebin / "git")
         return env
 
     def test_check_fails_for_broad_descriptions(self) -> None:
@@ -455,13 +496,8 @@ class SkillMetadataTest(unittest.TestCase):
         text = wrapper.read_text()
 
         self.assertIn("npx skills update", text)
-        self.assertIsNotNone(
-            re.search(
-                r"npx skills update.*skill_metadata\.py\" apply.*skill_metadata\.py\" check",
-                text,
-                re.S,
-            )
-        )
+        self.assertLess(text.index('skill_metadata.py" apply'), text.index('skill_metadata.py" check'))
+        self.assertLess(text.index("npx skills update"), text.index("restore_metadata )"))
 
     def test_update_wrapper_restores_unlocks_after_fake_npx_update(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
@@ -589,6 +625,36 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertEqual(custom_lock.read_text(), "operator symlink lock\n")
         self.assertFalse((home / "npx.args").exists())
 
+    def test_update_wrapper_restores_metadata_after_failed_npx_and_preserves_npx_rc(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        home = pathlib.Path(tempdir.name) / "home"
+        shared = home / ".agents" / "skills"
+        fakebin = pathlib.Path(tempdir.name) / "bin"
+        shared.mkdir(parents=True)
+        fakebin.mkdir()
+        self.populate_imported_skills(shared)
+        skill_metadata.apply_overrides(shared)
+        self.write_partial_failure_npx(fakebin, 23)
+        env = self.base_runtime_env(home, fakebin)
+
+        result = subprocess.run(
+            [str(ROOT / "bin" / "skills-update")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 23, result.stderr + result.stdout)
+        self.assertEqual((home / "npx.args").read_text(), "skills update\n")
+        ponytail_review = (shared / "ponytail-review" / "SKILL.md").read_text()
+        self.assertIn("Use only when the user explicitly names", ponytail_review)
+        wayfinder = (shared / "wayfinder" / "SKILL.md").read_text()
+        self.assertNotIn("disable-model-invocation: true", wayfinder)
+        self.assertEqual((shared / "ponytail").resolve(), (ROOT / "skills" / "ponytail").resolve())
+
     def test_update_wrapper_refuses_unknown_ponytail_collision_before_npx(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
@@ -661,7 +727,7 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertFalse((home / "npx.args").exists())
         self.assertTrue(legacy.is_dir())
 
-    def test_bootstrap_refuses_regular_home_skills_lock_before_git_or_npx(self) -> None:
+    def test_bootstrap_refuses_regular_home_skills_lock_before_npx(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
         root = pathlib.Path(tempdir.name)
@@ -674,7 +740,8 @@ class SkillMetadataTest(unittest.TestCase):
         npx = fakebin / "npx"
         npx.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n")
         npx.chmod(0o755)
-        env = self.base_runtime_env(home, fakebin, private=root / "private")
+        pstack = self.create_fake_pstack_checkout(root)
+        env = self.base_runtime_env(home, fakebin, pstack=pstack, private=root / "private")
         env["AGENTS_CFG_DIR"] = str(ROOT)
 
         result = subprocess.run(
@@ -689,10 +756,9 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("refusing to replace non-symlink skills lock", result.stderr + result.stdout)
         self.assertEqual((home / "skills-lock.json").read_text(), "operator lock\n")
-        self.assertFalse((home / "git.args").exists())
         self.assertFalse((home / "npx.args").exists())
 
-    def test_bootstrap_refuses_custom_home_skills_lock_symlink_before_git_or_npx(self) -> None:
+    def test_bootstrap_refuses_custom_home_skills_lock_symlink_before_npx(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
         root = pathlib.Path(tempdir.name)
@@ -707,7 +773,8 @@ class SkillMetadataTest(unittest.TestCase):
         npx = fakebin / "npx"
         npx.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n")
         npx.chmod(0o755)
-        env = self.base_runtime_env(home, fakebin, private=root / "private")
+        pstack = self.create_fake_pstack_checkout(root)
+        env = self.base_runtime_env(home, fakebin, pstack=pstack, private=root / "private")
         env["AGENTS_CFG_DIR"] = str(ROOT)
 
         result = subprocess.run(
@@ -725,8 +792,157 @@ class SkillMetadataTest(unittest.TestCase):
             skill_metadata.symlink_target(home / "skills-lock.json").resolve(),
             custom_lock.resolve(),
         )
-        self.assertFalse((home / "git.args").exists())
         self.assertFalse((home / "npx.args").exists())
+
+    def test_bootstrap_uses_shared_install_preflight_before_npx(self) -> None:
+        text = (ROOT / "bootstrap.sh").read_text()
+
+        self.assertNotIn("preflight_skills_lock()", text)
+        self.assertLess(text.index("preflight-install"), text.index("npx --yes"))
+
+    def test_bootstrap_refuses_private_ponytail_before_npx(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        root = pathlib.Path(tempdir.name)
+        home = root / "home"
+        shared = home / ".agents" / "skills"
+        fakebin = root / "bin"
+        private = root / "private"
+        private_ponytail = private / "skills" / "ponytail"
+        home.mkdir()
+        shared.mkdir(parents=True)
+        fakebin.mkdir()
+        private_ponytail.mkdir(parents=True)
+        (private_ponytail / "SKILL.md").write_text(
+            "---\nname: ponytail\ndescription: private ponytail\n---\n"
+        )
+        pstack = self.create_fake_pstack_checkout(root)
+        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
+        npx = fakebin / "npx"
+        npx.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n")
+        npx.chmod(0o755)
+        env = self.base_runtime_env(home, fakebin, pstack=pstack, private=private)
+        env["AGENTS_CFG_DIR"] = str(ROOT)
+
+        result = subprocess.run(
+            [str(ROOT / "bootstrap.sh")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("refusing private ponytail override", result.stderr + result.stdout)
+        self.assertFalse((home / "npx.args").exists())
+
+    def test_bootstrap_refuses_unknown_active_ponytail_before_npx(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        root = pathlib.Path(tempdir.name)
+        home = root / "home"
+        shared = home / ".agents" / "skills"
+        fakebin = root / "bin"
+        home.mkdir()
+        shared.mkdir(parents=True)
+        fakebin.mkdir()
+        ponytail = shared / "ponytail"
+        ponytail.mkdir()
+        (ponytail / "SKILL.md").write_text(
+            "---\nname: ponytail\ndescription: custom active ponytail\n---\n"
+        )
+        pstack = self.create_fake_pstack_checkout(root)
+        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
+        npx = fakebin / "npx"
+        npx.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n")
+        npx.chmod(0o755)
+        env = self.base_runtime_env(home, fakebin, pstack=pstack)
+        env["AGENTS_CFG_DIR"] = str(ROOT)
+
+        result = subprocess.run(
+            [str(ROOT / "bootstrap.sh")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("refusing to replace non-symlink ponytail path", result.stderr + result.stdout)
+        self.assertFalse((home / "npx.args").exists())
+
+    def test_bootstrap_refuses_unknown_legacy_quarantine_before_npx(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        root = pathlib.Path(tempdir.name)
+        home = root / "home"
+        shared = home / ".agents" / "skills"
+        fakebin = root / "bin"
+        home.mkdir()
+        shared.mkdir(parents=True)
+        fakebin.mkdir()
+        legacy = shared / "ponytail.upstream-disabled"
+        legacy.mkdir()
+        (legacy / "SKILL.md").write_text(
+            "---\nname: ponytail\ndescription: unknown legacy quarantine\n---\n"
+        )
+        pstack = self.create_fake_pstack_checkout(root)
+        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
+        npx = fakebin / "npx"
+        npx.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n")
+        npx.chmod(0o755)
+        env = self.base_runtime_env(home, fakebin, pstack=pstack)
+        env["AGENTS_CFG_DIR"] = str(ROOT)
+
+        result = subprocess.run(
+            [str(ROOT / "bootstrap.sh")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unknown legacy ponytail quarantine", result.stderr + result.stdout)
+        self.assertFalse((home / "npx.args").exists())
+
+    def test_bootstrap_restores_metadata_after_failed_npx_and_preserves_npx_rc(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        root = pathlib.Path(tempdir.name)
+        home = root / "home"
+        shared = home / ".agents" / "skills"
+        fakebin = root / "bin"
+        home.mkdir()
+        shared.mkdir(parents=True)
+        fakebin.mkdir()
+        self.populate_imported_skills(shared)
+        skill_metadata.apply_overrides(shared)
+        pstack = self.create_fake_pstack_checkout(root)
+        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
+        self.write_partial_failure_npx(fakebin, 24)
+        env = self.base_runtime_env(home, fakebin, pstack=pstack)
+        env["AGENTS_CFG_DIR"] = str(ROOT)
+
+        result = subprocess.run(
+            [str(ROOT / "bootstrap.sh")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 24, result.stderr + result.stdout)
+        self.assertEqual((home / "npx.args").read_text(), "--yes skills@latest experimental_install\n")
+        ponytail_review = (shared / "ponytail-review" / "SKILL.md").read_text()
+        self.assertIn("Use only when the user explicitly names", ponytail_review)
+        wayfinder = (shared / "wayfinder" / "SKILL.md").read_text()
+        self.assertNotIn("disable-model-invocation: true", wayfinder)
+        self.assertEqual((shared / "ponytail").resolve(), (ROOT / "skills" / "ponytail").resolve())
 
     def test_install_refuses_regular_home_skills_lock_before_any_shared_state(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
