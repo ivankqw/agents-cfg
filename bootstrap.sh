@@ -11,6 +11,37 @@ PSTACK_REPO="${PSTACK_REPO:-https://github.com/michael-denyer/pstack-claude.git}
 case "$(uname -s)" in Linux|Darwin) ;; *) echo "unsupported OS: $(uname -s)" >&2; exit 1;; esac
 for c in git python3; do command -v "$c" >/dev/null || { echo "missing prerequisite: $c" >&2; exit 1; }; done
 
+resolve_for_compare() { # resolve_for_compare <path>
+  python3 - "$1" <<'PY'
+import pathlib
+import sys
+
+print(pathlib.Path(sys.argv[1]).resolve(strict=False))
+PY
+}
+
+preflight_skills_lock() { # preflight_skills_lock <repo-lock> <home-lock>
+  repo_lock="$(resolve_for_compare "$1")"
+  home_lock="$2"
+  if [ -L "$home_lock" ]; then
+    target="$(readlink "$home_lock")"
+    case "$target" in
+      /*) target_path="$target" ;;
+      *) target_path="$(dirname "$home_lock")/$target" ;;
+    esac
+    current_lock="$(resolve_for_compare "$target_path")"
+    if [ "$current_lock" != "$repo_lock" ]; then
+      echo "refusing to retarget skills lock symlink: $home_lock -> $target" >&2
+      exit 1
+    fi
+  elif [ -e "$home_lock" ]; then
+    echo "refusing to replace non-symlink skills lock: $home_lock" >&2
+    exit 1
+  fi
+}
+
+preflight_skills_lock "$DEST/skills-lock.json" "$HOME/skills-lock.json"
+
 if [ -d "$DEST/.git" ]; then echo "== updating $DEST"; git -C "$DEST" pull --ff-only
 else echo "== cloning into $DEST"; git clone --depth 1 "$REPO" "$DEST"; fi
 
@@ -43,7 +74,7 @@ git -C "$PSTACK_DIR" checkout --detach "$PSTACK_REVISION"
 
 if command -v npx >/dev/null; then
   echo "== restoring third-party skills from the lockfile"
-  ln -sfn "$DEST/skills-lock.json" "$HOME/skills-lock.json"
+  python3 "$DEST/scripts/skill_metadata.py" install-lock "$DEST/skills-lock.json" "$HOME/skills-lock.json"
   ( cd "$HOME" && npx --yes skills@latest experimental_install )
 else
   echo "!! node/npx not found — skipping third-party skills. Later run:"

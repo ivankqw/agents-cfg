@@ -23,31 +23,9 @@ SHARED_SKILLS="$HOME/.agents/skills"
 DISABLED_SKILLS="$HOME/.agents/skills-disabled"
 PSTACK_DIR="${PSTACK_DIR:-$HOME/.local/share/agent-plugins/pstack-claude}"
 BIN="$HOME/.local/bin"
-mkdir -p "$CLAUDE_DIR"/{skills,agents,hooks} "$CODEX_DIR"/{hooks,prompts} "$SHARED_SKILLS" "$DISABLED_SKILLS" "$BIN"
-chmod 700 "$SHARED_SKILLS" "$DISABLED_SKILLS"
+LOCK="$HOME/skills-lock.json"
 
-link() { # link <target> <linkname>
-  [ -e "$1" ] || return 0
-  if [ -L "$2" ] || [ ! -e "$2" ]; then ln -sfn "$1" "$2"
-  else echo "  ! not a symlink, leaving alone: $2"; fi
-}
-
-echo "== skills"
-# Third-party skills stay installer-managed in ~/.agents/skills so that
-# `npx skills update` keeps them fresh. We only link them into place — vendoring
-# them would freeze them at one commit and cut them off from upstream.
-# The `skills` CLI reads skills-lock.json from the CURRENT directory and installs
-# into ./.agents/skills — so running it from $HOME targets ~/.agents/skills.
-link "$AC/skills-lock.json" "$HOME/skills-lock.json"
-python3 "$AC/scripts/skill_metadata.py" migrate-ponytail-quarantine \
-  "$SHARED_SKILLS" "$DISABLED_SKILLS"
-python3 "$AC/scripts/skill_metadata.py" install-ponytail \
-  "$AC/skills/ponytail" "$SHARED_SKILLS/ponytail" "$DISABLED_SKILLS"
-for d in "$AC"/skills/*/; do
-  [ "$(basename "$d")" = "ponytail" ] && continue
-  link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"
-done
-[ -d "$PRIVATE/skills" ] && for d in "$PRIVATE"/skills/*/; do link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"; done
+python3 "$AC/scripts/skill_metadata.py" preflight-lock "$AC/skills-lock.json" "$LOCK"
 
 PSTACK_REVISION="$(sed -n '1p' "$AC/pstack-revision.txt")"
 if ! printf '%s\n' "$PSTACK_REVISION" | grep -Eq '^[0-9a-f]{40}$'; then
@@ -75,6 +53,37 @@ if [ ! -d "$PSTACK_DIR/plugins/pstack/skills" ] || \
 fi
 PSTACK_SKILLS="$PSTACK_RESOLVED/plugins/pstack/skills"
 PSTACK_PROMPTS="$PSTACK_RESOLVED/plugins/pstack/.codex-plugin/prompts"
+
+python3 "$AC/scripts/skill_metadata.py" preflight-ponytail "$AC/skills/ponytail" "$SHARED_SKILLS"
+python3 "$AC/scripts/skill_metadata.py" preflight-private-ponytail "$PRIVATE"
+mkdir -p "$CLAUDE_DIR"/{skills,agents,hooks} "$CODEX_DIR"/{hooks,prompts} "$SHARED_SKILLS" "$DISABLED_SKILLS" "$BIN"
+chmod 700 "$SHARED_SKILLS" "$DISABLED_SKILLS"
+
+link() { # link <target> <linkname>
+  [ -e "$1" ] || return 0
+  if [ -L "$2" ] || [ ! -e "$2" ]; then ln -sfn "$1" "$2"
+  else echo "  ! not a symlink, leaving alone: $2"; fi
+}
+
+echo "== skills"
+# Third-party skills stay installer-managed in ~/.agents/skills so that
+# `npx skills update` keeps them fresh. We only link them into place — vendoring
+# them would freeze them at one commit and cut them off from upstream.
+# The `skills` CLI reads skills-lock.json from the CURRENT directory and installs
+# into ./.agents/skills — so running it from $HOME targets ~/.agents/skills.
+python3 "$AC/scripts/skill_metadata.py" install-lock "$AC/skills-lock.json" "$LOCK"
+python3 "$AC/scripts/skill_metadata.py" migrate-ponytail-quarantine \
+  "$SHARED_SKILLS" "$DISABLED_SKILLS"
+python3 "$AC/scripts/skill_metadata.py" install-ponytail \
+  "$AC/skills/ponytail" "$SHARED_SKILLS/ponytail" "$DISABLED_SKILLS"
+for d in "$AC"/skills/*/; do
+  [ "$(basename "$d")" = "ponytail" ] && continue
+  link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"
+done
+[ -d "$PRIVATE/skills" ] && for d in "$PRIVATE"/skills/*/; do
+  [ "$(basename "$d")" = "ponytail" ] && continue
+  link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"
+done
 python3 - "$SHARED_SKILLS" "$CODEX_DIR/prompts" "$PSTACK_SKILLS" "$PSTACK_PROMPTS" <<'PY'
 import os, pathlib, sys
 

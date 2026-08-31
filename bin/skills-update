@@ -15,34 +15,13 @@ AC="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
 SHARED_SKILLS="${SHARED_SKILLS:-$HOME/.agents/skills}"
 DISABLED_SKILLS="${DISABLED_SKILLS:-$HOME/.agents/skills-disabled}"
 
+LOCK="$HOME/skills-lock.json"
+
+python3 "$AC/scripts/skill_metadata.py" preflight-lock "$AC/skills-lock.json" "$LOCK"
+python3 "$AC/scripts/skill_metadata.py" preflight-ponytail "$AC/skills/ponytail" "$SHARED_SKILLS"
 mkdir -p "$SHARED_SKILLS" "$DISABLED_SKILLS"
 chmod 700 "$SHARED_SKILLS" "$DISABLED_SKILLS"
-
-resolve_for_compare() { # resolve_for_compare <path>
-  DIR="$(cd "$(dirname "$1")" && pwd -P)"
-  printf '%s/%s\n' "$DIR" "$(basename "$1")"
-}
-
-LOCK="$HOME/skills-lock.json"
-DESIRED_LOCK="$(resolve_for_compare "$AC/skills-lock.json")"
-if [ -L "$LOCK" ]; then
-  TARGET="$(readlink "$LOCK")"
-  case "$TARGET" in
-    /*) TARGET_PATH="$TARGET" ;;
-    *) TARGET_PATH="$(dirname "$LOCK")/$TARGET" ;;
-  esac
-  CURRENT_LOCK="$(resolve_for_compare "$TARGET_PATH")"
-  if [ "$CURRENT_LOCK" != "$DESIRED_LOCK" ]; then
-    echo "refusing to retarget skills lock symlink: $LOCK -> $TARGET" >&2
-    exit 1
-  fi
-  ln -sfn "$AC/skills-lock.json" "$LOCK"
-elif [ ! -e "$LOCK" ]; then
-  ln -sfn "$AC/skills-lock.json" "$LOCK"
-else
-  echo "refusing to replace non-symlink skills lock: $LOCK" >&2
-  exit 1
-fi
+python3 "$AC/scripts/skill_metadata.py" install-lock "$AC/skills-lock.json" "$LOCK"
 
 ( cd "$HOME" && npx skills update )
 

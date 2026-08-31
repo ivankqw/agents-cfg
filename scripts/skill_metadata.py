@@ -103,6 +103,28 @@ def symlink_target(path: pathlib.Path) -> pathlib.Path:
     return target
 
 
+def validate_lock(repo_lock: pathlib.Path, home_lock: pathlib.Path) -> list[str]:
+    desired = repo_lock.resolve(strict=False)
+    if home_lock.is_symlink():
+        current = symlink_target(home_lock).resolve(strict=False)
+        if current != desired:
+            raise RuntimeError(
+                f"refusing to retarget skills lock symlink: {home_lock} -> {os.readlink(home_lock)}"
+            )
+        return [f"skills-lock: already points to {repo_lock}"]
+    if home_lock.exists():
+        raise RuntimeError(f"refusing to replace non-symlink skills lock: {home_lock}")
+    return [f"skills-lock: available at {home_lock}"]
+
+
+def install_lock(repo_lock: pathlib.Path, home_lock: pathlib.Path) -> list[str]:
+    validate_lock(repo_lock, home_lock)
+    if home_lock.is_symlink():
+        home_lock.unlink()
+    home_lock.symlink_to(repo_lock)
+    return [f"skills-lock: linked {home_lock} -> {repo_lock}"]
+
+
 def looks_like_upstream_main_ponytail(path: pathlib.Path) -> bool:
     skill = path / "SKILL.md"
     if not skill.is_file():
@@ -145,7 +167,31 @@ def legacy_quarantine_path(disabled_root: pathlib.Path, name: str) -> pathlib.Pa
 def migrate_legacy_ponytail_quarantines(
     active_root: pathlib.Path, disabled_root: pathlib.Path
 ) -> list[str]:
+    validate_legacy_ponytail_quarantines(active_root)
+
     if not active_root.is_dir():
+        raise FileNotFoundError(f"missing active skill root: {active_root}")
+
+    results: list[str] = []
+    candidates = sorted(
+        path
+        for path in active_root.iterdir()
+        if path.name == "ponytail.upstream-disabled"
+        or path.name.startswith("ponytail.upstream-disabled.")
+    )
+    for path in candidates:
+        archived = legacy_quarantine_path(disabled_root, path.name)
+        shutil.move(str(path), str(archived))
+        results.append(f"ponytail: moved legacy quarantine {path} to {archived}")
+    return results
+
+
+def validate_legacy_ponytail_quarantines(
+    active_root: pathlib.Path, missing_ok: bool = False
+) -> list[str]:
+    if not active_root.is_dir():
+        if missing_ok:
+            return [f"ponytail: no active skill root at {active_root}"]
         raise FileNotFoundError(f"missing active skill root: {active_root}")
 
     candidates = sorted(
@@ -160,18 +206,10 @@ def migrate_legacy_ponytail_quarantines(
                 "unknown legacy ponytail quarantine "
                 f"{path}. Move it aside manually before install can link Claude skills."
             )
-
-    results: list[str] = []
-    for path in candidates:
-        archived = legacy_quarantine_path(disabled_root, path.name)
-        shutil.move(str(path), str(archived))
-        results.append(f"ponytail: moved legacy quarantine {path} to {archived}")
-    return results
+    return [f"ponytail: legacy quarantine preflight ok in {active_root}"]
 
 
-def install_ponytail(
-    source: pathlib.Path, destination: pathlib.Path, disabled_root: pathlib.Path
-) -> list[str]:
+def validate_ponytail_install(source: pathlib.Path, destination: pathlib.Path) -> list[str]:
     if not source.exists():
         raise FileNotFoundError(f"missing ponytail source: {source}")
 
@@ -179,12 +217,48 @@ def install_ponytail(
         current_target = symlink_target(destination).resolve(strict=False)
         desired_target = source.resolve(strict=False)
         if current_target == desired_target:
-            return [f"ponytail: already linked to {source}"]
+            return [f"ponytail: symlink preflight ok at {destination}"]
         raise RuntimeError(
             "refusing to retarget ponytail symlink "
             f"{destination} -> {symlink_target(destination)}. "
             f"Move it aside manually before linking the repo wrapper at {source}."
         )
+
+    if not destination.exists():
+        return [f"ponytail: destination available at {destination}"]
+
+    if destination.is_dir() and looks_like_upstream_main_ponytail(destination):
+        return [f"ponytail: known upstream collision at {destination}"]
+
+    raise RuntimeError(
+        "refusing to replace non-symlink ponytail path "
+        f"{destination}. Move it aside, or replace it with the repo wrapper at {source}."
+    )
+
+
+def validate_ponytail_preflight(source: pathlib.Path, active_root: pathlib.Path) -> list[str]:
+    results = validate_legacy_ponytail_quarantines(active_root, missing_ok=True)
+    results.extend(validate_ponytail_install(source, active_root / "ponytail"))
+    return results
+
+
+def validate_no_private_ponytail(private_root: pathlib.Path) -> list[str]:
+    private_ponytail = private_root / "skills" / "ponytail"
+    if os.path.lexists(private_ponytail):
+        raise RuntimeError(
+            "refusing private ponytail override "
+            f"{private_ponytail}. Move it aside; the repo wrapper owns the ponytail skill."
+        )
+    return [f"ponytail: no private override at {private_ponytail}"]
+
+
+def install_ponytail(
+    source: pathlib.Path, destination: pathlib.Path, disabled_root: pathlib.Path
+) -> list[str]:
+    validate_ponytail_install(source, destination)
+
+    if destination.is_symlink():
+        return [f"ponytail: already linked to {source}"]
 
     if not destination.exists():
         destination.symlink_to(source)
@@ -199,13 +273,12 @@ def install_ponytail(
             f"ponytail: linked {destination} -> {source}",
         ]
 
-    raise RuntimeError(
-        "refusing to replace non-symlink ponytail path "
-        f"{destination}. Move it aside, or replace it with the repo wrapper at {source}."
-    )
+    raise RuntimeError("unreachable ponytail install state")
 
 
 def apply_overrides(root: pathlib.Path) -> list[str]:
+    if not root.is_dir():
+        raise FileNotFoundError(f"missing skill root: {root}")
     results: list[str] = []
     for name, description in EXPLICIT_USE_DESCRIPTIONS.items():
         path = skill_file(root, name)
@@ -225,6 +298,8 @@ def apply_overrides(root: pathlib.Path) -> list[str]:
 def unlock_skills(unlock_file: pathlib.Path, root: pathlib.Path) -> list[str]:
     if not unlock_file.exists():
         return []
+    if not root.is_dir():
+        raise FileNotFoundError(f"missing skill root: {root}")
     names = [
         line.strip()
         for line in unlock_file.read_text().splitlines()
@@ -279,8 +354,12 @@ def main(argv: list[str]) -> int:
         choices=(
             "apply",
             "check",
+            "install-lock",
             "install-ponytail",
             "migrate-ponytail-quarantine",
+            "preflight-lock",
+            "preflight-ponytail",
+            "preflight-private-ponytail",
             "unlock",
         ),
     )
@@ -289,47 +368,73 @@ def main(argv: list[str]) -> int:
     parser.add_argument("path3", nargs="?")
     args = parser.parse_args(argv)
 
-    if args.command == "install-ponytail":
-        if args.path2 is None or args.path3 is None:
-            parser.error("install-ponytail requires source, destination, and disabled-root")
-        emit(
-            install_ponytail(
-                pathlib.Path(args.path1),
-                pathlib.Path(args.path2),
-                pathlib.Path(args.path3),
+    try:
+        if args.command == "preflight-lock":
+            if args.path2 is None:
+                parser.error("preflight-lock requires repo-lock and home-lock")
+            emit(validate_lock(pathlib.Path(args.path1), pathlib.Path(args.path2)))
+            return 0
+
+        if args.command == "install-lock":
+            if args.path2 is None:
+                parser.error("install-lock requires repo-lock and home-lock")
+            emit(install_lock(pathlib.Path(args.path1), pathlib.Path(args.path2)))
+            return 0
+
+        if args.command == "preflight-ponytail":
+            if args.path2 is None:
+                parser.error("preflight-ponytail requires source and active-root")
+            emit(validate_ponytail_preflight(pathlib.Path(args.path1), pathlib.Path(args.path2)))
+            return 0
+
+        if args.command == "preflight-private-ponytail":
+            emit(validate_no_private_ponytail(pathlib.Path(args.path1)))
+            return 0
+
+        if args.command == "install-ponytail":
+            if args.path2 is None or args.path3 is None:
+                parser.error("install-ponytail requires source, destination, and disabled-root")
+            emit(
+                install_ponytail(
+                    pathlib.Path(args.path1),
+                    pathlib.Path(args.path2),
+                    pathlib.Path(args.path3),
+                )
             )
-        )
-        return 0
+            return 0
 
-    if args.command == "migrate-ponytail-quarantine":
-        if args.path2 is None:
-            parser.error("migrate-ponytail-quarantine requires active-root and disabled-root")
-        emit(
-            migrate_legacy_ponytail_quarantines(
-                pathlib.Path(args.path1),
-                pathlib.Path(args.path2),
+        if args.command == "migrate-ponytail-quarantine":
+            if args.path2 is None:
+                parser.error("migrate-ponytail-quarantine requires active-root and disabled-root")
+            emit(
+                migrate_legacy_ponytail_quarantines(
+                    pathlib.Path(args.path1),
+                    pathlib.Path(args.path2),
+                )
             )
-        )
+            return 0
+
+        if args.command == "unlock":
+            if args.path2 is None:
+                parser.error("unlock requires unlock-file and skill-root")
+            emit(unlock_skills(pathlib.Path(args.path1), pathlib.Path(args.path2)))
+            return 0
+
+        root = pathlib.Path(args.path1)
+
+        if args.command == "apply":
+            emit(apply_overrides(root))
+            return 0
+
+        problems = check_overrides(root)
+        if problems:
+            emit(problems)
+            return 1
+        emit(f"{name}: explicit-use description" for name in EXPLICIT_USE_DESCRIPTIONS)
         return 0
-
-    if args.command == "unlock":
-        if args.path2 is None:
-            parser.error("unlock requires unlock-file and skill-root")
-        emit(unlock_skills(pathlib.Path(args.path1), pathlib.Path(args.path2)))
-        return 0
-
-    root = pathlib.Path(args.path1)
-
-    if args.command == "apply":
-        emit(apply_overrides(root))
-        return 0
-
-    problems = check_overrides(root)
-    if problems:
-        emit(problems)
+    except (FileNotFoundError, RuntimeError, ValueError) as error:
+        print(str(error), file=sys.stderr)
         return 1
-    emit(f"{name}: explicit-use description" for name in EXPLICIT_USE_DESCRIPTIONS)
-    return 0
 
 
 if __name__ == "__main__":

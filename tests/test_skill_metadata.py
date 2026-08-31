@@ -165,6 +165,64 @@ class SkillMetadataTest(unittest.TestCase):
         self.addCleanup(lambda: shutil.rmtree(disabled_root, ignore_errors=True))
         return disabled_root
 
+    def write_fake_git(self, fakebin: pathlib.Path, revision: str) -> None:
+        git = fakebin / "git"
+        git.write_text(
+            textwrap.dedent(
+                """\
+                #!/usr/bin/env bash
+                set -euo pipefail
+                printf '%s\n' "$*" >> "$HOME/git.args"
+                if [ "$1" = "-C" ] && [ "$3" = "rev-parse" ] && [ "$4" = "HEAD" ]; then
+                  printf '%s\n' "$FAKE_PSTACK_REVISION"
+                  exit 0
+                fi
+                if [ "$1" = "-C" ] && [ "$3" = "status" ] && [ "$4" = "--porcelain" ]; then
+                  exit 0
+                fi
+                printf 'unexpected git args: %s\n' "$*" >&2
+                exit 97
+                """
+            )
+        )
+        git.chmod(0o755)
+        self.assertEqual(len(revision), 40)
+
+    def create_fake_pstack_checkout(self, root: pathlib.Path) -> pathlib.Path:
+        pstack = root / "pstack"
+        (pstack / ".git").mkdir(parents=True)
+        skill = pstack / "plugins" / "pstack" / "skills" / "architect"
+        prompt = pstack / "plugins" / "pstack" / ".codex-plugin" / "prompts"
+        skill.mkdir(parents=True)
+        prompt.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(
+            "---\nname: architect\ndescription: pstack architect\n---\n"
+        )
+        (prompt / "architect.md").write_text("# architect\n")
+        return pstack
+
+    def populate_imported_skills(self, root: pathlib.Path) -> None:
+        for name, content in FIXTURES.items():
+            skill_dir = root / name
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            (skill_dir / "SKILL.md").write_text(content)
+
+    def base_runtime_env(
+        self,
+        home: pathlib.Path,
+        fakebin: pathlib.Path,
+        pstack: pathlib.Path | None = None,
+        private: pathlib.Path | None = None,
+    ) -> dict[str, str]:
+        revision = (ROOT / "pstack-revision.txt").read_text().splitlines()[0]
+        env = os.environ.copy()
+        env["HOME"] = str(home)
+        env["PATH"] = f"{fakebin}{os.pathsep}{env['PATH']}"
+        env["PRIVATE_CONFIG"] = str(private or (home.parent / "missing-private"))
+        env["PSTACK_DIR"] = str(pstack or (home.parent / "missing-pstack"))
+        env["FAKE_PSTACK_REVISION"] = revision
+        return env
+
     def test_check_fails_for_broad_descriptions(self) -> None:
         root = self.create_root()
 
@@ -209,6 +267,47 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("ponytail-review: missing expected skill", stdout.getvalue())
         self.assertNotIn("explicit-use description", stdout.getvalue())
+
+    def test_cli_apply_fails_for_missing_root(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        missing = pathlib.Path(tempdir.name) / "missing-skills-root"
+
+        result = subprocess.run(
+            ["python3", str(ROOT / "scripts" / "skill_metadata.py"), "apply", str(missing)],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f"missing skill root: {missing}", result.stderr + result.stdout)
+
+    def test_cli_unlock_fails_for_missing_root(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        root = pathlib.Path(tempdir.name)
+        unlock_file = root / "skills-unlock.txt"
+        unlock_file.write_text("wayfinder\n")
+        missing = root / "missing-skills-root"
+
+        result = subprocess.run(
+            [
+                "python3",
+                str(ROOT / "scripts" / "skill_metadata.py"),
+                "unlock",
+                str(unlock_file),
+                str(missing),
+            ],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f"missing skill root: {missing}", result.stderr + result.stdout)
 
     def test_override_descriptions_require_explicit_user_invocation_for_every_skill(self) -> None:
         self.assertEqual(
@@ -490,22 +589,302 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertEqual(custom_lock.read_text(), "operator symlink lock\n")
         self.assertFalse((home / "npx.args").exists())
 
+    def test_update_wrapper_refuses_unknown_ponytail_collision_before_npx(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        home = pathlib.Path(tempdir.name) / "home"
+        shared = home / ".agents" / "skills"
+        fakebin = pathlib.Path(tempdir.name) / "bin"
+        shared.mkdir(parents=True)
+        fakebin.mkdir()
+        self.populate_imported_skills(shared)
+        ponytail = shared / "ponytail"
+        ponytail.mkdir()
+        (ponytail / "SKILL.md").write_text(
+            "---\nname: ponytail\ndescription: custom local ponytail\n---\n"
+        )
+        npx = fakebin / "npx"
+        npx.write_text(
+            "#!/usr/bin/env bash\n"
+            "printf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n"
+        )
+        npx.chmod(0o755)
+        env = self.base_runtime_env(home, fakebin)
+
+        result = subprocess.run(
+            [str(ROOT / "bin" / "skills-update")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("refusing to replace non-symlink ponytail path", result.stderr + result.stdout)
+        self.assertFalse((home / "npx.args").exists())
+        self.assertTrue(ponytail.is_dir())
+
+    def test_update_wrapper_refuses_unknown_legacy_quarantine_before_npx(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        home = pathlib.Path(tempdir.name) / "home"
+        shared = home / ".agents" / "skills"
+        fakebin = pathlib.Path(tempdir.name) / "bin"
+        shared.mkdir(parents=True)
+        fakebin.mkdir()
+        self.populate_imported_skills(shared)
+        legacy = shared / "ponytail.upstream-disabled"
+        legacy.mkdir()
+        (legacy / "SKILL.md").write_text(
+            "---\nname: ponytail\ndescription: custom local quarantine\n---\n"
+        )
+        npx = fakebin / "npx"
+        npx.write_text(
+            "#!/usr/bin/env bash\n"
+            "printf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n"
+        )
+        npx.chmod(0o755)
+        env = self.base_runtime_env(home, fakebin)
+
+        result = subprocess.run(
+            [str(ROOT / "bin" / "skills-update")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unknown legacy ponytail quarantine", result.stderr + result.stdout)
+        self.assertFalse((home / "npx.args").exists())
+        self.assertTrue(legacy.is_dir())
+
+    def test_bootstrap_refuses_regular_home_skills_lock_before_git_or_npx(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        root = pathlib.Path(tempdir.name)
+        home = root / "home"
+        fakebin = root / "bin"
+        home.mkdir()
+        fakebin.mkdir()
+        (home / "skills-lock.json").write_text("operator lock\n")
+        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
+        npx = fakebin / "npx"
+        npx.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n")
+        npx.chmod(0o755)
+        env = self.base_runtime_env(home, fakebin, private=root / "private")
+        env["AGENTS_CFG_DIR"] = str(ROOT)
+
+        result = subprocess.run(
+            [str(ROOT / "bootstrap.sh")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("refusing to replace non-symlink skills lock", result.stderr + result.stdout)
+        self.assertEqual((home / "skills-lock.json").read_text(), "operator lock\n")
+        self.assertFalse((home / "git.args").exists())
+        self.assertFalse((home / "npx.args").exists())
+
+    def test_bootstrap_refuses_custom_home_skills_lock_symlink_before_git_or_npx(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        root = pathlib.Path(tempdir.name)
+        home = root / "home"
+        fakebin = root / "bin"
+        home.mkdir()
+        fakebin.mkdir()
+        custom_lock = root / "custom-lock.json"
+        custom_lock.write_text("operator symlink lock\n")
+        (home / "skills-lock.json").symlink_to(custom_lock)
+        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
+        npx = fakebin / "npx"
+        npx.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n")
+        npx.chmod(0o755)
+        env = self.base_runtime_env(home, fakebin, private=root / "private")
+        env["AGENTS_CFG_DIR"] = str(ROOT)
+
+        result = subprocess.run(
+            [str(ROOT / "bootstrap.sh")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("refusing to retarget skills lock symlink", result.stderr + result.stdout)
+        self.assertEqual(
+            skill_metadata.symlink_target(home / "skills-lock.json").resolve(),
+            custom_lock.resolve(),
+        )
+        self.assertFalse((home / "git.args").exists())
+        self.assertFalse((home / "npx.args").exists())
+
+    def test_install_refuses_regular_home_skills_lock_before_any_shared_state(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        root = pathlib.Path(tempdir.name)
+        home = root / "home"
+        fakebin = root / "bin"
+        home.mkdir()
+        fakebin.mkdir()
+        (home / "skills-lock.json").write_text("operator lock\n")
+        env = self.base_runtime_env(home, fakebin)
+
+        result = subprocess.run(
+            [str(ROOT / "install.sh")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("refusing to replace non-symlink skills lock", result.stderr + result.stdout)
+        self.assertEqual((home / "skills-lock.json").read_text(), "operator lock\n")
+        self.assertFalse((home / ".agents").exists())
+
+    def test_install_refuses_custom_home_skills_lock_symlink_before_any_shared_state(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        root = pathlib.Path(tempdir.name)
+        home = root / "home"
+        fakebin = root / "bin"
+        home.mkdir()
+        fakebin.mkdir()
+        custom_lock = root / "custom-lock.json"
+        custom_lock.write_text("operator symlink lock\n")
+        (home / "skills-lock.json").symlink_to(custom_lock)
+        env = self.base_runtime_env(home, fakebin)
+
+        result = subprocess.run(
+            [str(ROOT / "install.sh")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("refusing to retarget skills lock symlink", result.stderr + result.stdout)
+        self.assertEqual(
+            skill_metadata.symlink_target(home / "skills-lock.json").resolve(),
+            custom_lock.resolve(),
+        )
+        self.assertFalse((home / ".agents").exists())
+
+    def test_install_refuses_missing_pstack_before_skill_links(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        root = pathlib.Path(tempdir.name)
+        home = root / "home"
+        fakebin = root / "bin"
+        home.mkdir()
+        fakebin.mkdir()
+        env = self.base_runtime_env(home, fakebin)
+
+        result = subprocess.run(
+            [str(ROOT / "install.sh")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("pstack checkout is missing", result.stderr + result.stdout)
+        self.assertFalse((home / "skills-lock.json").exists())
+        self.assertFalse((home / ".agents").exists())
+
+    def test_install_refuses_private_ponytail_before_shared_links(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        root = pathlib.Path(tempdir.name)
+        home = root / "home"
+        shared = home / ".agents" / "skills"
+        fakebin = root / "bin"
+        private = root / "private"
+        private_ponytail = private / "skills" / "ponytail"
+        fakebin.mkdir()
+        shared.mkdir(parents=True)
+        self.populate_imported_skills(shared)
+        private_ponytail.mkdir(parents=True)
+        (private_ponytail / "SKILL.md").write_text(
+            "---\nname: ponytail\ndescription: private ponytail\n---\n"
+        )
+        pstack = self.create_fake_pstack_checkout(root)
+        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
+        env = self.base_runtime_env(home, fakebin, pstack=pstack, private=private)
+
+        result = subprocess.run(
+            [str(ROOT / "install.sh")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("refusing private ponytail override", result.stderr + result.stdout)
+        self.assertFalse((shared / "ponytail").exists())
+
+    def test_install_succeeds_in_temp_home_with_valid_preflight(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        root = pathlib.Path(tempdir.name)
+        home = root / "home"
+        shared = home / ".agents" / "skills"
+        fakebin = root / "bin"
+        fakebin.mkdir()
+        shared.mkdir(parents=True)
+        self.populate_imported_skills(shared)
+        pstack = self.create_fake_pstack_checkout(root)
+        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
+        env = self.base_runtime_env(home, fakebin, pstack=pstack)
+
+        result = subprocess.run(
+            [str(ROOT / "install.sh")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual((home / "skills-lock.json").resolve(), (ROOT / "skills-lock.json").resolve())
+        self.assertEqual((shared / "ponytail").resolve(), (ROOT / "skills" / "ponytail").resolve())
+        self.assertFalse((shared / "ponytail.upstream-disabled").exists())
+
     def test_install_refuses_unknown_legacy_quarantine_before_linking_repo_wrapper(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
         root = pathlib.Path(tempdir.name)
         home = root / "home"
         shared = home / ".agents" / "skills"
+        fakebin = root / "bin"
+        fakebin.mkdir()
         shared.mkdir(parents=True)
         legacy = shared / "ponytail.upstream-disabled"
         legacy.mkdir()
         (legacy / "SKILL.md").write_text(
             "---\nname: ponytail\ndescription: custom local quarantine\n---\n"
         )
-        env = os.environ.copy()
-        env["HOME"] = str(home)
-        env["PRIVATE_CONFIG"] = str(root / "missing-private")
-        env["PSTACK_DIR"] = str(root / "missing-pstack")
+        pstack = self.create_fake_pstack_checkout(root)
+        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
+        env = self.base_runtime_env(home, fakebin, pstack=pstack)
 
         result = subprocess.run(
             [str(ROOT / "install.sh")],
