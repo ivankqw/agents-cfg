@@ -758,7 +758,7 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertEqual((home / "skills-lock.json").read_text(), "operator lock\n")
         self.assertFalse((home / "npx.args").exists())
 
-    def test_bootstrap_refuses_custom_home_skills_lock_symlink_before_npx(self) -> None:
+    def test_bootstrap_refuses_custom_home_skills_lock_symlink_before_shared_mutation(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
         root = pathlib.Path(tempdir.name)
@@ -791,6 +791,14 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertEqual(
             skill_metadata.symlink_target(home / "skills-lock.json").resolve(),
             custom_lock.resolve(),
+        )
+        git_args = (home / "git.args").read_text().splitlines()
+        self.assertFalse(
+            any(
+                re.search(r"(?:^| )(?:pull|fetch|checkout)(?: |$)", command)
+                for command in git_args
+            ),
+            git_args,
         )
         self.assertFalse((home / "npx.args").exists())
 
