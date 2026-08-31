@@ -34,7 +34,7 @@ When the fallback fires, the review is no longer cross-vendor. Say so.
 | `lean` | Claude Code | Sonnet 5 | Haiku 4.5 | Codex Sol | The plan is simple and the volume is high. |
 | `default` | Claude Code | Opus 5 | Sonnet 5 | Codex Sol | Ordinary work. |
 | `deep` | Claude Code | Fable 5 | Sonnet 5 | Codex Sol, then Opus 5 | Risky diffs, migrations, anything pre-deploy. |
-| `single-vendor` | Codex | Codex Sol | Codex Sol | GPT-5.5 | Codex owns the session, so cross-vendor review is unavailable. |
+| `single-vendor` | Codex | GPT-5.6 Sol Medium | GPT-5.6 Luna XHigh | GPT-5.6 Terra Medium | Codex owns the session, so cross-vendor review is unavailable. |
 
 ## Harness direction is not symmetric
 
