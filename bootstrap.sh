@@ -10,7 +10,31 @@ PSTACK_REPO="${PSTACK_REPO:-https://github.com/michael-denyer/pstack-claude.git}
 PRIVATE="${PRIVATE_CONFIG:-$HOME/agents-cfg-private}"
 
 case "$(uname -s)" in Linux|Darwin) ;; *) echo "unsupported OS: $(uname -s)" >&2; exit 1;; esac
-for c in git python3; do command -v "$c" >/dev/null || { echo "missing prerequisite: $c" >&2; exit 1; }; done
+for c in git python3 npx; do command -v "$c" >/dev/null || { echo "missing prerequisite: $c" >&2; exit 1; }; done
+
+preflight_skills_lock() {
+  python3 - "$DEST/skills-lock.json" "$HOME/skills-lock.json" <<'PY'
+import os
+import pathlib
+import sys
+
+repo_lock = pathlib.Path(sys.argv[1])
+home_lock = pathlib.Path(sys.argv[2])
+if not repo_lock.is_file():
+    raise SystemExit(f"missing repo skills lock: {repo_lock}")
+desired = repo_lock.resolve(strict=False)
+if home_lock.is_symlink():
+    target = pathlib.Path(os.readlink(home_lock))
+    if not target.is_absolute():
+        target = home_lock.parent / target
+    if target.resolve(strict=False) != desired:
+        raise SystemExit(
+            f"refusing to retarget skills lock symlink: {home_lock} -> {os.readlink(home_lock)}"
+        )
+elif home_lock.exists():
+    raise SystemExit(f"refusing to replace non-symlink skills lock: {home_lock}")
+PY
+}
 
 preflight_operator_state() {
   python3 "$DEST/scripts/skill_metadata.py" preflight-operator-state \
@@ -19,8 +43,7 @@ preflight_operator_state() {
 }
 
 if [ -d "$DEST/.git" ]; then
-  python3 "$DEST/scripts/skill_metadata.py" preflight-lock \
-    "$DEST/skills-lock.json" "$HOME/skills-lock.json"
+  preflight_skills_lock
   echo "== updating $DEST"
   git -C "$DEST" pull --ff-only
 else
@@ -65,17 +88,12 @@ python3 "$DEST/scripts/skill_metadata.py" preflight-install \
   "$DEST/skills-lock.json" "$HOME/skills-lock.json" "$PSTACK_DIR" "$DEST/pstack-revision.txt" \
   "$HOME/.agents/skills" "$DEST/skills/ponytail" "$PRIVATE"
 
-if command -v npx >/dev/null; then
-  echo "== restoring third-party skills from the lockfile"
-  python3 "$DEST/scripts/skill_metadata.py" install-lock "$DEST/skills-lock.json" "$HOME/skills-lock.json"
-  set +e
-  ( cd "$HOME" && npx --yes skills@latest experimental_install )
-  npx_rc=$?
-  set -e
-else
-  echo "!! node/npx not found — skipping third-party skills. Later run:"
-  echo "   cd ~ && npx skills experimental_install"
-fi
+echo "== restoring third-party skills from the lockfile"
+python3 "$DEST/scripts/skill_metadata.py" install-lock "$DEST/skills-lock.json" "$HOME/skills-lock.json"
+set +e
+( cd "$HOME" && npx --yes skills@latest experimental_install )
+npx_rc=$?
+set -e
 
 set +e
 "$DEST/install.sh"

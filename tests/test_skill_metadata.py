@@ -758,6 +758,71 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertEqual((home / "skills-lock.json").read_text(), "operator lock\n")
         self.assertFalse((home / "npx.args").exists())
 
+    def test_bootstrap_reaches_pull_for_checkout_without_metadata_script(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        root = pathlib.Path(tempdir.name)
+        home = root / "home"
+        checkout = root / "agents-cfg"
+        fakebin = root / "bin"
+        home.mkdir()
+        (checkout / ".git").mkdir(parents=True)
+        fakebin.mkdir()
+        shutil.copy(ROOT / "skills-lock.json", checkout / "skills-lock.json")
+        git = fakebin / "git"
+        git.write_text(
+            "#!/usr/bin/env bash\n"
+            "printf '%s\\n' \"$*\" >> \"$HOME/git.args\"\n"
+            "exit 73\n"
+        )
+        git.chmod(0o755)
+        env = self.base_runtime_env(home, fakebin)
+        env["AGENTS_CFG_DIR"] = str(checkout)
+
+        result = subprocess.run(
+            [str(ROOT / "bootstrap.sh")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 73, result.stderr + result.stdout)
+        self.assertIn(
+            "-C " + str(checkout) + " pull --ff-only",
+            (home / "git.args").read_text(),
+        )
+        self.assertNotIn("skill_metadata.py", result.stderr + result.stdout)
+
+    def test_bootstrap_requires_npx_before_shared_mutation(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        root = pathlib.Path(tempdir.name)
+        home = root / "home"
+        fakebin = root / "bin"
+        home.mkdir()
+        fakebin.mkdir()
+        (fakebin / "git").symlink_to("/usr/bin/git")
+        (fakebin / "python3").symlink_to("/usr/bin/python3")
+        (fakebin / "uname").symlink_to("/usr/bin/uname")
+        env = os.environ.copy()
+        env["HOME"] = str(home)
+        env["PATH"] = str(fakebin)
+
+        result = subprocess.run(
+            ["/bin/bash", str(ROOT / "bootstrap.sh")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing prerequisite: npx", result.stderr + result.stdout)
+        self.assertFalse((home / "git.args").exists())
+
     def test_bootstrap_refuses_custom_home_skills_lock_symlink_before_shared_mutation(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
@@ -809,13 +874,13 @@ class SkillMetadataTest(unittest.TestCase):
     def test_bootstrap_uses_shared_install_preflight_before_npx(self) -> None:
         text = (ROOT / "bootstrap.sh").read_text()
 
-        self.assertNotIn("preflight_skills_lock()", text)
+        self.assertLess(text.index("preflight_skills_lock"), text.index("pull --ff-only"))
         self.assertLess(text.index("preflight-install"), text.index("npx --yes"))
 
     def test_bootstrap_runs_operator_state_preflight_before_pstack_mutation(self) -> None:
         text = (ROOT / "bootstrap.sh").read_text()
 
-        self.assertLess(text.index("preflight-lock"), text.index("pull --ff-only"))
+        self.assertLess(text.index("preflight_skills_lock"), text.index("pull --ff-only"))
         self.assertIn(
             '  preflight_operator_state\n'
             '  echo "== fetching pinned pstack revision"\n'
