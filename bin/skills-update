@@ -17,7 +17,13 @@ DISABLED_SKILLS="${DISABLED_SKILLS:-$HOME/.agents/skills-disabled}"
 
 mkdir -p "$SHARED_SKILLS" "$DISABLED_SKILLS"
 chmod 700 "$SHARED_SKILLS" "$DISABLED_SKILLS"
-ln -sfn "$AC/skills-lock.json" "$HOME/skills-lock.json"
+LOCK="$HOME/skills-lock.json"
+if [ -L "$LOCK" ] || [ ! -e "$LOCK" ]; then
+  ln -sfn "$AC/skills-lock.json" "$LOCK"
+else
+  echo "refusing to replace non-symlink skills lock: $LOCK" >&2
+  exit 1
+fi
 
 ( cd "$HOME" && npx skills update )
 

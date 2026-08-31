@@ -330,6 +330,26 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertTrue(destination.is_dir())
         self.assertFalse(destination.is_symlink())
 
+    def test_install_ponytail_refuses_unknown_symlink_collision(self) -> None:
+        root = self.create_root()
+        source = root / "repo-ponytail"
+        source.mkdir()
+        (source / "SKILL.md").write_text(REPO_WRAPPER_PONYTAIL)
+        private = root / "private-ponytail"
+        private.mkdir()
+        (private / "SKILL.md").write_text(
+            "---\nname: ponytail\ndescription: private local wrapper\n---\n"
+        )
+        destination = root / "ponytail"
+        destination.symlink_to(private)
+        disabled_root = self.disabled_root_for(root)
+
+        with self.assertRaisesRegex(RuntimeError, "refusing to retarget ponytail symlink"):
+            skill_metadata.install_ponytail(source, destination, disabled_root)
+
+        self.assertTrue(destination.is_symlink())
+        self.assertEqual(skill_metadata.symlink_target(destination).resolve(), private.resolve())
+
     def test_update_wrapper_reapplies_and_checks_metadata_after_npx_update(self) -> None:
         wrapper = ROOT / "bin" / "skills-update"
 
@@ -400,6 +420,39 @@ class SkillMetadataTest(unittest.TestCase):
         wayfinder = (shared / "wayfinder" / "SKILL.md").read_text()
         self.assertNotIn("disable-model-invocation: true", wayfinder)
         self.assertIn("name: wayfinder", wayfinder)
+
+    def test_update_wrapper_refuses_regular_home_skills_lock(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        home = pathlib.Path(tempdir.name) / "home"
+        fakebin = pathlib.Path(tempdir.name) / "bin"
+        home.mkdir()
+        fakebin.mkdir()
+        lock = home / "skills-lock.json"
+        lock.write_text("operator-owned lock\n")
+        npx = fakebin / "npx"
+        npx.write_text(
+            "#!/usr/bin/env bash\n"
+            "printf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n"
+        )
+        npx.chmod(0o755)
+        env = os.environ.copy()
+        env["HOME"] = str(home)
+        env["PATH"] = f"{fakebin}{os.pathsep}{env['PATH']}"
+
+        result = subprocess.run(
+            [str(ROOT / "bin" / "skills-update")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(lock.is_symlink())
+        self.assertEqual(lock.read_text(), "operator-owned lock\n")
+        self.assertFalse((home / "npx.args").exists())
 
     def test_install_moves_legacy_quarantines_before_claude_skill_links(self) -> None:
         text = (ROOT / "install.sh").read_text()

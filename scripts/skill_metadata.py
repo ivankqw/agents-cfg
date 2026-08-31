@@ -180,9 +180,11 @@ def install_ponytail(
         desired_target = source.resolve(strict=False)
         if current_target == desired_target:
             return [f"ponytail: already linked to {source}"]
-        destination.unlink()
-        destination.symlink_to(source)
-        return [f"ponytail: retargeted symlink to {source}"]
+        raise RuntimeError(
+            "refusing to retarget ponytail symlink "
+            f"{destination} -> {symlink_target(destination)}. "
+            f"Move it aside manually before linking the repo wrapper at {source}."
+        )
 
     if not destination.exists():
         destination.symlink_to(source)
