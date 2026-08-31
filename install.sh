@@ -20,9 +20,20 @@ PRIVATE="${PRIVATE_CONFIG:-$HOME/agents-cfg-private}"
 CLAUDE_DIR="$HOME/.claude"
 CODEX_DIR="$HOME/.codex"
 SHARED_SKILLS="$HOME/.agents/skills"
+DISABLED_SKILLS="$HOME/.agents/skills-disabled"
 PSTACK_DIR="${PSTACK_DIR:-$HOME/.local/share/agent-plugins/pstack-claude}"
 BIN="$HOME/.local/bin"
-mkdir -p "$CLAUDE_DIR"/{skills,agents,hooks} "$CODEX_DIR"/{hooks,prompts} "$SHARED_SKILLS" "$BIN"
+LOCK="$HOME/skills-lock.json"
+
+python3 "$AC/scripts/skill_metadata.py" preflight-install \
+  "$AC/skills-lock.json" "$LOCK" "$PSTACK_DIR" "$AC/pstack-revision.txt" \
+  "$SHARED_SKILLS" "$AC/skills/ponytail" "$PRIVATE"
+PSTACK_RESOLVED="$(cd "$PSTACK_DIR" && pwd -P)"
+PSTACK_SKILLS="$PSTACK_RESOLVED/plugins/pstack/skills"
+PSTACK_PROMPTS="$PSTACK_RESOLVED/plugins/pstack/.codex-plugin/prompts"
+
+mkdir -p "$CLAUDE_DIR"/{skills,agents,hooks} "$CODEX_DIR"/{hooks,prompts} "$SHARED_SKILLS" "$DISABLED_SKILLS" "$BIN"
+chmod 700 "$SHARED_SKILLS" "$DISABLED_SKILLS"
 
 link() { # link <target> <linkname>
   [ -e "$1" ] || return 0
@@ -36,36 +47,19 @@ echo "== skills"
 # them would freeze them at one commit and cut them off from upstream.
 # The `skills` CLI reads skills-lock.json from the CURRENT directory and installs
 # into ./.agents/skills — so running it from $HOME targets ~/.agents/skills.
-link "$AC/skills-lock.json" "$HOME/skills-lock.json"
-for d in "$AC"/skills/*/; do link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"; done
-[ -d "$PRIVATE/skills" ] && for d in "$PRIVATE"/skills/*/; do link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"; done
-
-PSTACK_REVISION="$(sed -n '1p' "$AC/pstack-revision.txt")"
-if ! printf '%s\n' "$PSTACK_REVISION" | grep -Eq '^[0-9a-f]{40}$'; then
-  echo "invalid pstack revision in $AC/pstack-revision.txt" >&2; exit 1
-fi
-if [ ! -d "$PSTACK_DIR/.git" ]; then
-  echo "pstack checkout is missing: $PSTACK_DIR" >&2
-  echo "run $AC/bootstrap.sh, or clone the pinned checkout first" >&2
-  exit 1
-fi
-PSTACK_RESOLVED="$(cd "$PSTACK_DIR" && pwd -P)"
-PSTACK_ACTUAL="$(git -C "$PSTACK_DIR" rev-parse HEAD)"
-if [ "$PSTACK_ACTUAL" != "$PSTACK_REVISION" ]; then
-  echo "pstack revision mismatch: expected $PSTACK_REVISION, found $PSTACK_ACTUAL" >&2
-  exit 1
-fi
-if [ -n "$(git -C "$PSTACK_DIR" status --porcelain)" ]; then
-  echo "pstack checkout has local changes; leaving it unchanged: $PSTACK_DIR" >&2
-  exit 1
-fi
-if [ ! -d "$PSTACK_DIR/plugins/pstack/skills" ] || \
-   [ ! -d "$PSTACK_DIR/plugins/pstack/.codex-plugin/prompts" ]; then
-  echo "pstack checkout does not contain the expected plugin layout: $PSTACK_DIR" >&2
-  exit 1
-fi
-PSTACK_SKILLS="$PSTACK_RESOLVED/plugins/pstack/skills"
-PSTACK_PROMPTS="$PSTACK_RESOLVED/plugins/pstack/.codex-plugin/prompts"
+python3 "$AC/scripts/skill_metadata.py" install-lock "$AC/skills-lock.json" "$LOCK"
+python3 "$AC/scripts/skill_metadata.py" migrate-ponytail-quarantine \
+  "$SHARED_SKILLS" "$DISABLED_SKILLS"
+python3 "$AC/scripts/skill_metadata.py" install-ponytail \
+  "$AC/skills/ponytail" "$SHARED_SKILLS/ponytail" "$DISABLED_SKILLS"
+for d in "$AC"/skills/*/; do
+  [ "$(basename "$d")" = "ponytail" ] && continue
+  link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"
+done
+[ -d "$PRIVATE/skills" ] && for d in "$PRIVATE"/skills/*/; do
+  [ "$(basename "$d")" = "ponytail" ] && continue
+  link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"
+done
 python3 - "$SHARED_SKILLS" "$CODEX_DIR/prompts" "$PSTACK_SKILLS" "$PSTACK_PROMPTS" <<'PY'
 import os, pathlib, sys
 
@@ -115,26 +109,14 @@ for f in "$PSTACK_PROMPTS"/*.md; do
   link "$f" "$CODEX_DIR/prompts/$(basename "$f")"
 done
 
+echo "== constraining explicit-use third-party skill triggers"
+python3 "$AC/scripts/skill_metadata.py" apply "$SHARED_SKILLS"
+python3 "$AC/scripts/skill_metadata.py" check "$SHARED_SKILLS"
+
 for d in "$SHARED_SKILLS"/*/; do link "${d%/}" "$CLAUDE_DIR/skills/$(basename "$d")"; done
 
 echo "== unlocking skills listed in skills-unlock.txt"
-if [ -f "$AC/skills-unlock.txt" ]; then
-  python3 - "$AC/skills-unlock.txt" "$HOME/.agents/skills" <<'PYEOF'
-import pathlib, re, sys
-names = [l.strip() for l in open(sys.argv[1]) if l.strip() and not l.startswith("#")]
-root = pathlib.Path(sys.argv[2])
-for n in names:
-    f = root / n / "SKILL.md"
-    if not f.exists():
-        print(f"  skip {n}: not installed"); continue
-    s = f.read_text()
-    s2 = re.sub(r"^disable-model-invocation:[ \t]*true[ \t]*\n", "", s, count=1, flags=re.M)
-    if s == s2:
-        print(f"  {n}: already unlocked")
-    else:
-        f.write_text(s2); print(f"  {n}: unlocked")
-PYEOF
-fi
+python3 "$AC/scripts/skill_metadata.py" unlock "$AC/skills-unlock.txt" "$SHARED_SKILLS"
 
 echo "== agents / hooks"
 for f in "$AC"/agents/*.md;  do link "$f" "$CLAUDE_DIR/agents/$(basename "$f")"; done

@@ -79,10 +79,12 @@ multi-agent pstack panels. It does not replace user settings.
 
 ```bash
 cd ~/agents-cfg && git pull     # conventions and my own skills take effect at once
-npx skills update               # move third-party skills to their latest versions
+./bin/skills-update             # update skills, then reapply checks and unlocks
 ```
 
-`npx skills update` refreshes the installed skills and rewrites the CLI's own global lockfile at
+`./bin/skills-update` refreshes the installed skills with `npx skills update`, then immediately
+reapplies the explicit-use metadata, checks that every expected skill is present, and restores
+`skills-unlock.txt`. It rewrites the CLI's own global lockfile at
 `~/.agents/.skill-lock.json`. It does not touch this repo, so `skills-lock.json` here goes stale
 without telling you. Refresh it when you want to keep an update:
 
@@ -132,6 +134,34 @@ Some skills drive a CLI on top of the prompt. None of them need an `npm install`
 
 `impeccable` ships its scripts inside the skill folder, so they arrive with the skill and stay in
 step with it. Do not vendor copies elsewhere.
+
+## Optional complexity and Ponytail skills
+
+Bootstrap restores these explicit-use skills from immutable upstream commit archives:
+
+| Source | Revision | Skills |
+|---|---|---|
+| `saurabhkumar8112/cyclomatic-complexity-skill` | `567886f485063c5f5f94503d5712ef75cbcbbd94` | `cyclomatic-complexity` |
+| `DietrichGebert/ponytail` | `2ed6c52c9d7e5e56942508591085fd45dea277d3` | `ponytail-review`, `ponytail-audit`, `ponytail-debt`, `ponytail-gain`, `ponytail-help` |
+
+The repository-owned `ponytail` skill has an explicit-request-only trigger. It keeps pstack routing
+as the default. It does not copy the broad upstream `ponytail` skill.
+
+Only the five report skill directories come from Ponytail. The install excludes commands, hooks,
+plugin manifests, the MCP server, benchmark scripts, publish scripts, runtime configuration, and
+persistent state. It does not enable the upstream `full` mode.
+
+Install rewrites the imported frontmatter descriptions after each restore or update, so Codex sees
+explicit-request triggers only.
+If an old non-symlink upstream `ponytail` directory blocks the repo wrapper, install quarantines
+that known directory into `~/.agents/skills-disabled/` and replaces it. Any other `ponytail`
+collision stops with an operator action.
+
+Treat complexity metrics as review guidance. Project limits and measured behavior take precedence
+over generic thresholds. Existing acceptance, verification, security, accessibility, and operator
+boundaries take precedence over simplification advice.
+
+Ponytail benchmark figures are sourced upstream. They are not measurements of this repository.
 
 ## Codex and pstack
 

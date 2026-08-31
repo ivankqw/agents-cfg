@@ -3,7 +3,7 @@
 #
 # Upstream sets that flag to reserve a skill for the human. Only list a skill
 # here when you want an agent to reach it as part of a flow. `npx skills update`
-# restores the flag, so re-run install.sh afterwards.
+# restores the flag, so use ./bin/skills-update for updates.
 #
 # Deliberately NOT listed:
 #   wait-what   a nudge that only means anything when a human says it

@@ -364,6 +364,60 @@
       "pluginName": "mattpocock-skills",
       "installedAt": "2026-08-14T01:39:21.928Z",
       "updatedAt": "2026-08-14T01:39:21.928Z"
+    },
+    "cyclomatic-complexity": {
+      "source": "https://codeload.github.com/saurabhkumar8112/cyclomatic-complexity-skill/tar.gz/567886f485063c5f5f94503d5712ef75cbcbbd94",
+      "sourceType": "download",
+      "sourceUrl": "https://codeload.github.com/saurabhkumar8112/cyclomatic-complexity-skill/tar.gz/567886f485063c5f5f94503d5712ef75cbcbbd94",
+      "skillPath": "skills/cyclomatic-complexity/SKILL.md",
+      "skillFolderHash": "a9f55a59f06f9448d63c136f204f08571b965a96",
+      "installedAt": "2026-08-31T03:54:54.581Z",
+      "updatedAt": "2026-08-31T03:54:54.581Z"
+    },
+    "ponytail-audit": {
+      "source": "https://codeload.github.com/DietrichGebert/ponytail/tar.gz/2ed6c52c9d7e5e56942508591085fd45dea277d3",
+      "sourceType": "download",
+      "sourceUrl": "https://codeload.github.com/DietrichGebert/ponytail/tar.gz/2ed6c52c9d7e5e56942508591085fd45dea277d3",
+      "skillPath": "skills/ponytail-audit/SKILL.md",
+      "skillFolderHash": "19744a9490abb0f5d0f18c6e39e3a3eb50f4daa1",
+      "installedAt": "2026-08-31T03:55:08.260Z",
+      "updatedAt": "2026-08-31T03:55:08.260Z"
+    },
+    "ponytail-debt": {
+      "source": "https://codeload.github.com/DietrichGebert/ponytail/tar.gz/2ed6c52c9d7e5e56942508591085fd45dea277d3",
+      "sourceType": "download",
+      "sourceUrl": "https://codeload.github.com/DietrichGebert/ponytail/tar.gz/2ed6c52c9d7e5e56942508591085fd45dea277d3",
+      "skillPath": "skills/ponytail-debt/SKILL.md",
+      "skillFolderHash": "fe9ea82cad2b42a9c244acc275c9091c414ff528",
+      "installedAt": "2026-08-31T03:55:08.262Z",
+      "updatedAt": "2026-08-31T03:55:08.262Z"
+    },
+    "ponytail-gain": {
+      "source": "https://codeload.github.com/DietrichGebert/ponytail/tar.gz/2ed6c52c9d7e5e56942508591085fd45dea277d3",
+      "sourceType": "download",
+      "sourceUrl": "https://codeload.github.com/DietrichGebert/ponytail/tar.gz/2ed6c52c9d7e5e56942508591085fd45dea277d3",
+      "skillPath": "skills/ponytail-gain/SKILL.md",
+      "skillFolderHash": "13724e1903f76456164f00ec2a3074848433588f",
+      "installedAt": "2026-08-31T03:55:08.264Z",
+      "updatedAt": "2026-08-31T03:55:08.264Z"
+    },
+    "ponytail-help": {
+      "source": "https://codeload.github.com/DietrichGebert/ponytail/tar.gz/2ed6c52c9d7e5e56942508591085fd45dea277d3",
+      "sourceType": "download",
+      "sourceUrl": "https://codeload.github.com/DietrichGebert/ponytail/tar.gz/2ed6c52c9d7e5e56942508591085fd45dea277d3",
+      "skillPath": "skills/ponytail-help/SKILL.md",
+      "skillFolderHash": "b7df7bc32b6e4e8bbde8acb2ef3c97ee7e7638f7",
+      "installedAt": "2026-08-31T03:55:08.265Z",
+      "updatedAt": "2026-08-31T03:55:08.265Z"
+    },
+    "ponytail-review": {
+      "source": "https://codeload.github.com/DietrichGebert/ponytail/tar.gz/2ed6c52c9d7e5e56942508591085fd45dea277d3",
+      "sourceType": "download",
+      "sourceUrl": "https://codeload.github.com/DietrichGebert/ponytail/tar.gz/2ed6c52c9d7e5e56942508591085fd45dea277d3",
+      "skillPath": "skills/ponytail-review/SKILL.md",
+      "skillFolderHash": "dc6d9660c4297496a9220de377f6f7df38ab1a53",
+      "installedAt": "2026-08-31T03:55:08.266Z",
+      "updatedAt": "2026-08-31T03:55:08.266Z"
     }
   },
   "dismissed": {

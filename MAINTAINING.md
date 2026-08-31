@@ -24,7 +24,7 @@ subject.
 
 ```bash
 npx skills add <owner>/<repo>
-./install.sh                    # Codex discovers it; Claude receives a link
+./install.sh                    # Codex discovers it; Claude receives a link and checks metadata
 ```
 
 Then record it, so a fresh machine gets it too. Copy the CLI's global lockfile into this repo and
@@ -41,6 +41,13 @@ PY
 git diff skills-lock.json
 ```
 
+If an imported skill must stay explicit-use-only, add or update its description override in
+`scripts/skill_metadata.py`. `install.sh` applies and checks those overrides in `~/.agents/skills`
+after each restore or update, so Codex sees the constrained triggers.
+That script also owns the special-case `ponytail` collision handling: replace only the known broad
+upstream main skill, quarantine it into `~/.agents/skills-disabled/`, and stop with an operator
+action for any other non-symlink `ponytail` path.
+
 ## Let a skill invoke another skill
 
 Upstream marks some skills `disable-model-invocation: true`, which reserves them for the human. A
@@ -52,8 +59,8 @@ frontmatter sets it. The flag has to leave the file.
 Add the skill name to `skills-unlock.txt` and run `./install.sh`, which strips the flag in
 `~/.agents/skills`. Leave a skill locked when it only makes sense from a human.
 
-**`npx skills update` restores the flag.** Re-run `./install.sh` after any update, or those phases go
-quiet with no error.
+**`npx skills update` restores the flag.** Run `./bin/skills-update` for updates. It runs the update,
+then reapplies checks and restores `skills-unlock.txt`.
 
 ## Change a convention
 
@@ -140,6 +147,14 @@ to generated Codex instructions because Codex does not support Claude `@imports`
   reciprocal Claude plugin. Select `single-vendor` when Codex owns the session.
 
 ## Before you say it works
+
+Run the canonical unit test command:
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+Do not use `python3 -m unittest -v` alone. It can report zero tests from this layout.
 
 Install into a throwaway `HOME` and look at what appears:
 

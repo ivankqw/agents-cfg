@@ -44,6 +44,18 @@ somewhere else, put it in the private layer.
   belongs to someone else. Wait for approval before you implement.
 - Do not gate requested work behind an audit or a prerequisite you invented. Ask first.
 
+## Optional measurement and simplification
+
+- Keep pstack routing as the default entry point. Use complexity or Ponytail skills only when the
+  user asks for them.
+- Treat complexity metrics as review input. Project limits and measured behavior take precedence
+  over generic thresholds.
+- Use Ponytail as an explicit opt-in tool. Do not enable its full mode or persistent state.
+- Acceptance criteria, verification rules, security controls, accessibility requirements, and
+  operator boundaries override simplification advice.
+- Ponytail benchmark figures come from upstream. Do not present them as current-repository
+  measurements.
+
 ## Roles and configs
 
 Three roles do the work, and which model fills each one is a named choice, not a per-task decision.
