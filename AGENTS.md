@@ -149,6 +149,9 @@ Only the five report skill directories come from Ponytail. The install excludes 
 plugin manifests, the MCP server, benchmark scripts, publish scripts, runtime configuration, and
 persistent state. It does not enable the upstream `full` mode.
 
+Install rewrites the imported frontmatter descriptions after each restore or update, so Codex sees
+explicit-request triggers only.
+
 Treat complexity metrics as review guidance. Project limits and measured behavior take precedence
 over generic thresholds. Existing acceptance, verification, security, accessibility, and operator
 boundaries take precedence over simplification advice.

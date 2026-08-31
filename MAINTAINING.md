@@ -41,6 +41,10 @@ PY
 git diff skills-lock.json
 ```
 
+If an imported skill must stay explicit-use-only, add or update its description override in
+`scripts/skill_metadata.py`. `install.sh` applies those overrides in `~/.agents/skills` after each
+restore or update, so Codex sees the constrained triggers.
+
 ## Let a skill invoke another skill
 
 Upstream marks some skills `disable-model-invocation: true`, which reserves them for the human. A

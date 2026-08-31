@@ -115,6 +115,9 @@ for f in "$PSTACK_PROMPTS"/*.md; do
   link "$f" "$CODEX_DIR/prompts/$(basename "$f")"
 done
 
+echo "== constraining explicit-use third-party skill triggers"
+python3 "$AC/scripts/skill_metadata.py" apply "$SHARED_SKILLS"
+
 for d in "$SHARED_SKILLS"/*/; do link "${d%/}" "$CLAUDE_DIR/skills/$(basename "$d")"; done
 
 echo "== unlocking skills listed in skills-unlock.txt"
