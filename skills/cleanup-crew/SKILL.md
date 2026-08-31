@@ -36,6 +36,11 @@ If the repository and the tracker disagree, the repository wins and say so in th
 
 Do the cheap structural passes first. They need no judgement, and they make the later passes legible.
 
+**A ticket's state is its body plus its latest comments.** Read the newest comments on every ticket
+before judging it: dated correction and resolution comments supersede the body they sit under, and a
+premise that looks stale in the body is often already corrected one comment down. Judging from the
+body alone re-reports rot that was already fixed.
+
 ### 0. Enumerate the board before you sweep it
 
 Do this first, every time, and write the counts down. Every later pass is scoped by what this step
