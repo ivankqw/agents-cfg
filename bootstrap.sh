@@ -12,8 +12,23 @@ PRIVATE="${PRIVATE_CONFIG:-$HOME/agents-cfg-private}"
 case "$(uname -s)" in Linux|Darwin) ;; *) echo "unsupported OS: $(uname -s)" >&2; exit 1;; esac
 for c in git python3; do command -v "$c" >/dev/null || { echo "missing prerequisite: $c" >&2; exit 1; }; done
 
-if [ -d "$DEST/.git" ]; then echo "== updating $DEST"; git -C "$DEST" pull --ff-only
-else echo "== cloning into $DEST"; git clone --depth 1 "$REPO" "$DEST"; fi
+preflight_operator_state() {
+  python3 "$DEST/scripts/skill_metadata.py" preflight-operator-state \
+    "$DEST/skills-lock.json" "$HOME/skills-lock.json" "$HOME/.agents/skills" \
+    "$DEST/skills/ponytail" "$PRIVATE"
+}
+
+if [ -d "$DEST/.git" ]; then
+  python3 "$DEST/scripts/skill_metadata.py" preflight-lock \
+    "$DEST/skills-lock.json" "$HOME/skills-lock.json"
+  echo "== updating $DEST"
+  git -C "$DEST" pull --ff-only
+else
+  echo "== cloning into $DEST"
+  git clone --depth 1 "$REPO" "$DEST"
+  python3 "$DEST/scripts/skill_metadata.py" preflight-lock \
+    "$DEST/skills-lock.json" "$HOME/skills-lock.json"
+fi
 
 PSTACK_REVISION="$(sed -n '1p' "$DEST/pstack-revision.txt")"
 if ! printf '%s\n' "$PSTACK_REVISION" | grep -Eq '^[0-9a-f]{40}$'; then
@@ -29,9 +44,11 @@ if [ -d "$PSTACK_DIR/.git" ]; then
     echo "pstack checkout has local changes; leaving it unchanged: $PSTACK_DIR" >&2
     exit 1
   fi
+  preflight_operator_state
   echo "== fetching pinned pstack revision"
   git -C "$PSTACK_DIR" fetch origin "$PSTACK_REVISION"
 else
+  preflight_operator_state
   echo "== cloning pstack into $PSTACK_DIR"
   mkdir -p "$(dirname "$PSTACK_DIR")"
   git clone "$PSTACK_REPO" "$PSTACK_DIR"
@@ -40,6 +57,7 @@ if ! git -C "$PSTACK_DIR" cat-file -e "$PSTACK_REVISION^{commit}" 2>/dev/null; t
   echo "pstack revision is missing after fetch: $PSTACK_REVISION" >&2
   exit 1
 fi
+preflight_operator_state
 git -C "$PSTACK_DIR" checkout --detach "$PSTACK_REVISION"
 
 npx_rc=0

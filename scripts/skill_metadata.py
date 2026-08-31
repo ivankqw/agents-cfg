@@ -314,6 +314,19 @@ def validate_install_preflight(
     return results
 
 
+def validate_operator_state_preflight(
+    repo_lock: pathlib.Path,
+    home_lock: pathlib.Path,
+    active_root: pathlib.Path,
+    ponytail_source: pathlib.Path,
+    private_root: pathlib.Path,
+) -> list[str]:
+    results = validate_lock(repo_lock, home_lock)
+    results.extend(validate_ponytail_preflight(ponytail_source, active_root))
+    results.extend(validate_no_private_ponytail(private_root))
+    return results
+
+
 def install_ponytail(
     source: pathlib.Path, destination: pathlib.Path, disabled_root: pathlib.Path
 ) -> list[str]:
@@ -421,6 +434,7 @@ def main(argv: list[str]) -> int:
             "migrate-ponytail-quarantine",
             "preflight-install",
             "preflight-lock",
+            "preflight-operator-state",
             "preflight-ponytail",
             "preflight-private-ponytail",
             "unlock",
@@ -475,6 +489,29 @@ def main(argv: list[str]) -> int:
                     home_lock,
                     pstack_dir,
                     pstack_revision_file,
+                    active_root,
+                    ponytail_source,
+                    private_root,
+                )
+            )
+            return 0
+
+        if args.command == "preflight-operator-state":
+            (
+                repo_lock,
+                home_lock,
+                active_root,
+                ponytail_source,
+                private_root,
+            ) = require_paths(
+                5,
+                "preflight-operator-state requires repo-lock, home-lock, active-root, "
+                "ponytail-source, and private-root",
+            )
+            emit(
+                validate_operator_state_preflight(
+                    repo_lock,
+                    home_lock,
                     active_root,
                     ponytail_source,
                     private_root,

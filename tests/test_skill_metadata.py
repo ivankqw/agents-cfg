@@ -792,7 +792,11 @@ class SkillMetadataTest(unittest.TestCase):
             skill_metadata.symlink_target(home / "skills-lock.json").resolve(),
             custom_lock.resolve(),
         )
-        git_args = (home / "git.args").read_text().splitlines()
+        git_args = (
+            (home / "git.args").read_text().splitlines()
+            if (home / "git.args").exists()
+            else []
+        )
         self.assertFalse(
             any(
                 re.search(r"(?:^| )(?:pull|fetch|checkout)(?: |$)", command)
@@ -807,6 +811,29 @@ class SkillMetadataTest(unittest.TestCase):
 
         self.assertNotIn("preflight_skills_lock()", text)
         self.assertLess(text.index("preflight-install"), text.index("npx --yes"))
+
+    def test_bootstrap_runs_operator_state_preflight_before_pstack_mutation(self) -> None:
+        text = (ROOT / "bootstrap.sh").read_text()
+
+        self.assertLess(text.index("preflight-lock"), text.index("pull --ff-only"))
+        self.assertIn(
+            '  preflight_operator_state\n'
+            '  echo "== fetching pinned pstack revision"\n'
+            '  git -C "$PSTACK_DIR" fetch origin "$PSTACK_REVISION"',
+            text,
+        )
+        self.assertIn(
+            '  preflight_operator_state\n'
+            '  echo "== cloning pstack into $PSTACK_DIR"\n'
+            '  mkdir -p "$(dirname "$PSTACK_DIR")"',
+            text,
+        )
+        self.assertIn(
+            'fi\n'
+            'preflight_operator_state\n'
+            'git -C "$PSTACK_DIR" checkout --detach "$PSTACK_REVISION"',
+            text,
+        )
 
     def test_bootstrap_refuses_private_ponytail_before_npx(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
