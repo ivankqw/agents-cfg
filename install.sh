@@ -39,10 +39,10 @@ echo "== skills"
 # The `skills` CLI reads skills-lock.json from the CURRENT directory and installs
 # into ./.agents/skills — so running it from $HOME targets ~/.agents/skills.
 link "$AC/skills-lock.json" "$HOME/skills-lock.json"
-python3 "$AC/scripts/skill_metadata.py" install-ponytail \
-  "$AC/skills/ponytail" "$SHARED_SKILLS/ponytail" "$DISABLED_SKILLS"
 python3 "$AC/scripts/skill_metadata.py" migrate-ponytail-quarantine \
   "$SHARED_SKILLS" "$DISABLED_SKILLS"
+python3 "$AC/scripts/skill_metadata.py" install-ponytail \
+  "$AC/skills/ponytail" "$SHARED_SKILLS/ponytail" "$DISABLED_SKILLS"
 for d in "$AC"/skills/*/; do
   [ "$(basename "$d")" = "ponytail" ] && continue
   link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"

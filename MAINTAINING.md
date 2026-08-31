@@ -148,6 +148,14 @@ to generated Codex instructions because Codex does not support Claude `@imports`
 
 ## Before you say it works
 
+Run the canonical unit test command:
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+Do not use `python3 -m unittest -v` alone. It can report zero tests from this layout.
+
 Install into a throwaway `HOME` and look at what appears:
 
 ```bash

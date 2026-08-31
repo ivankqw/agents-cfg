@@ -454,6 +454,74 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertEqual(lock.read_text(), "operator-owned lock\n")
         self.assertFalse((home / "npx.args").exists())
 
+    def test_update_wrapper_refuses_custom_home_skills_lock_symlink_before_npx(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        home = pathlib.Path(tempdir.name) / "home"
+        fakebin = pathlib.Path(tempdir.name) / "bin"
+        home.mkdir()
+        fakebin.mkdir()
+        custom_lock = pathlib.Path(tempdir.name) / "operator-lock.json"
+        custom_lock.write_text("operator symlink lock\n")
+        lock = home / "skills-lock.json"
+        lock.symlink_to(custom_lock)
+        npx = fakebin / "npx"
+        npx.write_text(
+            "#!/usr/bin/env bash\n"
+            "printf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n"
+        )
+        npx.chmod(0o755)
+        env = os.environ.copy()
+        env["HOME"] = str(home)
+        env["PATH"] = f"{fakebin}{os.pathsep}{env['PATH']}"
+
+        result = subprocess.run(
+            [str(ROOT / "bin" / "skills-update")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(lock.is_symlink())
+        self.assertEqual(skill_metadata.symlink_target(lock).resolve(), custom_lock.resolve())
+        self.assertEqual(custom_lock.read_text(), "operator symlink lock\n")
+        self.assertFalse((home / "npx.args").exists())
+
+    def test_install_refuses_unknown_legacy_quarantine_before_linking_repo_wrapper(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        root = pathlib.Path(tempdir.name)
+        home = root / "home"
+        shared = home / ".agents" / "skills"
+        shared.mkdir(parents=True)
+        legacy = shared / "ponytail.upstream-disabled"
+        legacy.mkdir()
+        (legacy / "SKILL.md").write_text(
+            "---\nname: ponytail\ndescription: custom local quarantine\n---\n"
+        )
+        env = os.environ.copy()
+        env["HOME"] = str(home)
+        env["PRIVATE_CONFIG"] = str(root / "missing-private")
+        env["PSTACK_DIR"] = str(root / "missing-pstack")
+
+        result = subprocess.run(
+            [str(ROOT / "install.sh")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unknown legacy ponytail quarantine", result.stderr + result.stdout)
+        self.assertTrue(legacy.is_dir())
+        self.assertFalse((shared / "ponytail").exists())
+        self.assertFalse((shared / "ponytail").is_symlink())
+
     def test_install_moves_legacy_quarantines_before_claude_skill_links(self) -> None:
         text = (ROOT / "install.sh").read_text()
 
@@ -468,6 +536,12 @@ class SkillMetadataTest(unittest.TestCase):
 
         self.assertIn('skill_metadata.py" unlock "$AC/skills-unlock.txt" "$SHARED_SKILLS"', install)
         self.assertIn('skill_metadata.py" unlock "$AC/skills-unlock.txt" "$SHARED_SKILLS"', update)
+
+    def test_maintaining_names_canonical_unittest_discovery_command(self) -> None:
+        text = (ROOT / "MAINTAINING.md").read_text()
+
+        self.assertIn("python3 -m unittest discover -s tests", text)
+        self.assertIn("python3 -m unittest -v", text)
 
 
 if __name__ == "__main__":
