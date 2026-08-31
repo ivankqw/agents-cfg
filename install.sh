@@ -131,23 +131,7 @@ python3 "$AC/scripts/skill_metadata.py" check "$SHARED_SKILLS"
 for d in "$SHARED_SKILLS"/*/; do link "${d%/}" "$CLAUDE_DIR/skills/$(basename "$d")"; done
 
 echo "== unlocking skills listed in skills-unlock.txt"
-if [ -f "$AC/skills-unlock.txt" ]; then
-  python3 - "$AC/skills-unlock.txt" "$HOME/.agents/skills" <<'PYEOF'
-import pathlib, re, sys
-names = [l.strip() for l in open(sys.argv[1]) if l.strip() and not l.startswith("#")]
-root = pathlib.Path(sys.argv[2])
-for n in names:
-    f = root / n / "SKILL.md"
-    if not f.exists():
-        print(f"  skip {n}: not installed"); continue
-    s = f.read_text()
-    s2 = re.sub(r"^disable-model-invocation:[ \t]*true[ \t]*\n", "", s, count=1, flags=re.M)
-    if s == s2:
-        print(f"  {n}: already unlocked")
-    else:
-        f.write_text(s2); print(f"  {n}: unlocked")
-PYEOF
-fi
+python3 "$AC/scripts/skill_metadata.py" unlock "$AC/skills-unlock.txt" "$SHARED_SKILLS"
 
 echo "== agents / hooks"
 for f in "$AC"/agents/*.md;  do link "$f" "$CLAUDE_DIR/agents/$(basename "$f")"; done

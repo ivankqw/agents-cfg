@@ -60,7 +60,7 @@ Add the skill name to `skills-unlock.txt` and run `./install.sh`, which strips t
 `~/.agents/skills`. Leave a skill locked when it only makes sense from a human.
 
 **`npx skills update` restores the flag.** Run `./bin/skills-update` for updates. It runs the update,
-then reapplies and checks this repo's skill metadata.
+then reapplies checks and restores `skills-unlock.txt`.
 
 ## Change a convention
 

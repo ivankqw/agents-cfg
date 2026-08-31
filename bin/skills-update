@@ -26,3 +26,4 @@ python3 "$AC/scripts/skill_metadata.py" install-ponytail \
   "$AC/skills/ponytail" "$SHARED_SKILLS/ponytail" "$DISABLED_SKILLS"
 python3 "$AC/scripts/skill_metadata.py" apply "$SHARED_SKILLS"
 python3 "$AC/scripts/skill_metadata.py" check "$SHARED_SKILLS"
+python3 "$AC/scripts/skill_metadata.py" unlock "$AC/skills-unlock.txt" "$SHARED_SKILLS"

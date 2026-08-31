@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import shutil
 import sys
 from typing import Iterable
@@ -219,6 +220,36 @@ def apply_overrides(root: pathlib.Path) -> list[str]:
     return results
 
 
+def unlock_skills(unlock_file: pathlib.Path, root: pathlib.Path) -> list[str]:
+    if not unlock_file.exists():
+        return []
+    names = [
+        line.strip()
+        for line in unlock_file.read_text().splitlines()
+        if line.strip() and not line.startswith("#")
+    ]
+    results: list[str] = []
+    for name in names:
+        path = skill_file(root, name)
+        if not path.exists():
+            results.append(f"skip {name}: not installed")
+            continue
+        original = path.read_text()
+        updated = re.sub(
+            r"^disable-model-invocation:[ \t]*true[ \t]*\n",
+            "",
+            original,
+            count=1,
+            flags=re.M,
+        )
+        if updated == original:
+            results.append(f"{name}: already unlocked")
+            continue
+        path.write_text(updated)
+        results.append(f"{name}: unlocked")
+    return results
+
+
 def check_overrides(root: pathlib.Path) -> list[str]:
     problems: list[str] = []
     if not root.is_dir():
@@ -243,7 +274,13 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "command",
-        choices=("apply", "check", "install-ponytail", "migrate-ponytail-quarantine"),
+        choices=(
+            "apply",
+            "check",
+            "install-ponytail",
+            "migrate-ponytail-quarantine",
+            "unlock",
+        ),
     )
     parser.add_argument("path1")
     parser.add_argument("path2", nargs="?")
@@ -271,6 +308,12 @@ def main(argv: list[str]) -> int:
                 pathlib.Path(args.path2),
             )
         )
+        return 0
+
+    if args.command == "unlock":
+        if args.path2 is None:
+            parser.error("unlock requires unlock-file and skill-root")
+        emit(unlock_skills(pathlib.Path(args.path1), pathlib.Path(args.path2)))
         return 0
 
     root = pathlib.Path(args.path1)

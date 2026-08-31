@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import pathlib
 import re
 import shutil
+import subprocess
 import tempfile
 import textwrap
 import unittest
@@ -342,6 +344,63 @@ class SkillMetadataTest(unittest.TestCase):
             )
         )
 
+    def test_update_wrapper_restores_unlocks_after_fake_npx_update(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        home = pathlib.Path(tempdir.name) / "home"
+        shared = home / ".agents" / "skills"
+        fakebin = pathlib.Path(tempdir.name) / "bin"
+        shared.mkdir(parents=True)
+        fakebin.mkdir()
+        for name, content in FIXTURES.items():
+            skill_dir = shared / name
+            skill_dir.mkdir()
+            (skill_dir / "SKILL.md").write_text(content)
+        skill_metadata.apply_overrides(shared)
+
+        npx = fakebin / "npx"
+        npx.write_text(
+            textwrap.dedent(
+                """\
+                #!/usr/bin/env bash
+                set -euo pipefail
+                printf '%s\n' "$*" > "$HOME/npx.args"
+                [ "$1" = "skills" ]
+                [ "$2" = "update" ]
+                mkdir -p "$HOME/.agents/skills/wayfinder"
+                printf '%s\n' \\
+                  '---' \\
+                  'name: wayfinder' \\
+                  'description: Find a route through unfamiliar code.' \\
+                  'disable-model-invocation: true' \\
+                  '---' \\
+                  '' \\
+                  '# Wayfinder' \\
+                  > "$HOME/.agents/skills/wayfinder/SKILL.md"
+                """
+            )
+        )
+        npx.chmod(0o755)
+
+        env = os.environ.copy()
+        env["HOME"] = str(home)
+        env["PATH"] = f"{fakebin}{os.pathsep}{env['PATH']}"
+
+        result = subprocess.run(
+            [str(ROOT / "bin" / "skills-update")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual((home / "npx.args").read_text(), "skills update\n")
+        wayfinder = (shared / "wayfinder" / "SKILL.md").read_text()
+        self.assertNotIn("disable-model-invocation: true", wayfinder)
+        self.assertIn("name: wayfinder", wayfinder)
+
     def test_install_moves_legacy_quarantines_before_claude_skill_links(self) -> None:
         text = (ROOT / "install.sh").read_text()
 
@@ -349,6 +408,13 @@ class SkillMetadataTest(unittest.TestCase):
         claude_links = text.index('for d in "$SHARED_SKILLS"/*/; do link')
 
         self.assertLess(migrate, claude_links)
+
+    def test_install_and_update_paths_share_unlock_command(self) -> None:
+        install = (ROOT / "install.sh").read_text()
+        update = (ROOT / "bin" / "skills-update").read_text()
+
+        self.assertIn('skill_metadata.py" unlock "$AC/skills-unlock.txt" "$SHARED_SKILLS"', install)
+        self.assertIn('skill_metadata.py" unlock "$AC/skills-unlock.txt" "$SHARED_SKILLS"', update)
 
 
 if __name__ == "__main__":
