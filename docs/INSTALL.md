@@ -104,7 +104,7 @@ Hermes support is experimental. `bootstrap.sh` and `install.sh` do not configure
    higher-priority Hermes context file exists. See the
    [Hermes context-file documentation](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/context-files.md).
 3. Link the own and upstream skill directories from their recorded sources into
-   `~/.hermes/skills`. Do not copy them. Use `skills-lock.json` and `pstack-revision.txt` as the
+   `~/.hermes/skills`. Do not copy them. Use `skills-catalog.json` and `pstack-revision.txt` as the
    source records.
 4. Generate `mcp_servers` entries in `~/.hermes/config.yaml` from `mcp/servers.json`. Keep secrets in
    their named environment variables. See the
@@ -131,8 +131,11 @@ If a concurrent sync wins the push race, the command rebuilds its generated cata
 retries the push once. The final install refreshes links and regenerates the Codex instruction file.
 
 Use `bin/skills-sync run --no-push` when you want to review the generated commit before you push it.
-See [Keep upstream skills in sync](SYNC.md) for removal safeguards, ignored skills, lockfile
-locations, and schedule generation.
+Use `bin/skills-sync run --no-update` to restore and normalize without updating upstream skills.
+
+Run `bin/skills-sync schedule` to print a daily macOS `launchd` definition and a Linux `cron` line.
+The command derives the minute from the hostname and includes the resolved `npx` directory in
+`PATH`.
 
 Run the Claude Code and Codex verification checks after an update. Repeat the Hermes canary if you
 use the experimental setup.

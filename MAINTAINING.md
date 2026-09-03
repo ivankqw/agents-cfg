@@ -38,6 +38,8 @@ git diff skills-catalog.json
 Add intentionally untracked skill names to `skills-ignore.txt`. Use one glob per line. The
 normalizer excludes matching lockfile entries, and the checker ignores matching installed folders.
 The larksuite skills stay outside the committed catalog because they are managed separately.
+The skills CLI normally writes its lockfile to `~/.agents/.skill-lock.json`. `XDG_STATE_HOME` changes
+that location. `SKILLS_LOCK_FILE` overrides both locations.
 The normalizer preserves catalog entries that are absent from the current machine. It prints each
 proposed removal. Review those names before you run `bin/skills-sync normalize --allow-removals`.
 

@@ -4,8 +4,6 @@ I use one repository to shape two agent harnesses. Claude Code and Codex have di
 and extension systems, so `install.sh` gives both harnesses the same working method. The design keeps
 stable rules in a small convention file and loads detailed procedures as skills.
 
-The [glossary](./GLOSSARY.md) defines each layer term.
-
 ## The base model supplies general capability
 
 I treat a harness and its selected model as one base model. The harness supplies the work loop,
@@ -39,24 +37,23 @@ I keep own skills under `skills/`. The current set includes `cleanup-crew` and `
 `install.sh` links each own skill into `~/.agents/skills`. It links that shared directory into
 Claude Code.
 
-I consume upstream skills from their source origin. `skills-lock.json` records sources for the
-`skills` CLI. `bootstrap.sh` runs `npx skills experimental_install` from the home directory, and
-`bin/skills-update` runs `npx skills update`. The repository stores the lockfile and does not copy
-those skill folders.
+I consume upstream skills from their source origin. `skills-catalog.json` records the stable source
+fields. `bin/skills-sync` restores missing skills and updates installed skills. The repository does
+not copy those skill folders.
 
 [Matt Pocock's skills repository](https://github.com/mattpocock/skills) supplies recorded skills.
-`skills-lock.json` is the current list of names and source paths.
+`skills-catalog.json` is the current list of names and source paths.
 
 [pstack](https://github.com/michael-denyer/pstack-claude) comes from @poteto's original pstack work.
 `bootstrap.sh` clones the port from the source named by `PSTACK_REPO`. It checks out the commit in
 `pstack-revision.txt`. `install.sh` links pstack skills and Codex prompt files from that checkout. The
-repository neither copies pstack nor adds it to `skills-lock.json`.
+repository neither copies pstack nor adds it to `skills-catalog.json`.
 
 `npx skills` installs ordinary upstream skill folders under `~/.agents/skills`. The installer uses
-symlinks for own skills, pstack, and harness exposure. Each lockfile entry keeps the upstream source
-and revision data.
+symlinks for own skills, pstack, and harness exposure. The catalog keeps stable upstream source
+data. The live lockfile keeps machine state.
 
-Herdr runs Codex implementation agents in observable terminal panes. `skills-lock.json` records the
+Herdr runs Codex implementation agents in observable terminal panes. `skills-catalog.json` records the
 `herdrdev/herdr` skill source. `bootstrap.sh` stops if restoration does not create the Herdr skill.
 
 ## Agents isolate a responsibility
@@ -119,3 +116,25 @@ canary steps. The installer does not edit `~/.hermes/config.yaml`.
 I can change a model through a config, refine a procedure in one skill, or add an event reminder in
 a hook. Each change has one home. The harness can improve while the portable layer keeps my method,
 and an upstream skill can improve without losing its source history.
+
+## Terms
+
+| Term | Meaning |
+|---|---|
+| Base model | The harness and selected model treated as one starting system. |
+| Harness | The program that runs the model, supplies tools, manages context, and controls the work loop. |
+| Convention | A rule that every session receives through an instruction file. |
+| Skill | A Markdown procedure that an agent loads for a matching task. |
+| Fat skill | A skill with enough examples, constraints, and failure cases to guide judgment. |
+| Own skill | A skill maintained in this repository under `skills/`. |
+| Upstream skill | A skill maintained elsewhere and recorded in `skills-catalog.json` or `pstack-revision.txt`. |
+| Config | A named set of model and effort choices for each role. |
+| Role | One responsibility in a stretch of agent work. |
+| Orchestrator | The role that holds the plan and makes decisions. |
+| Implementer | The role that builds from an explicit brief. |
+| Reviewer | The role that attacks a finished change. |
+| Lane | One independent stream of work or review. |
+| Hook | A program that a harness runs for a configured event. |
+| Lockfile | JSON state from the `skills` CLI, including source and machine data. |
+| Portable layer | Methods and tools that can move between jobs and machines. |
+| Private layer | Employer, host, person, and domain details kept outside this repository. |

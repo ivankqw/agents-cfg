@@ -1,6 +1,6 @@
 # Credits
 
-This repository keeps upstream work connected to its source. `skills-lock.json`,
+This repository keeps upstream work connected to its source. `skills-catalog.json`,
 `pstack-revision.txt`, and `NOTICE` record the code inputs.
 
 - [Garry Tan](https://github.com/garrytan/gbrain/blob/master/docs/ethos/THIN_HARNESS_FAT_SKILLS.md)

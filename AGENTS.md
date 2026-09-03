@@ -2,17 +2,17 @@
 
 This repository installs one portable layer for Claude Code and Codex.
 
-If the user asks you to install it, read `docs/INSTALL.md` and complete each verification step.
+Start with these files:
 
-If the user asks how it works, read these files:
+- `README.md` for the stack map and document routes.
+- `docs/THESIS.md` for the reason and boundaries.
+- `docs/HOW-IT-WORKS.md` for the layer flow and terms.
 
-- `docs/HOW-IT-WORKS.md`
-- `docs/GLOSSARY.md`
-- `docs/THESIS.md`
-- `docs/SYNC.md`
+If the user asks you to install or operate it, read `docs/INSTALL.md` and complete each verification
+step.
 
-If the user asks you to change it, read `MAINTAINING.md` and `conventions/AGENTS.md` first. Preserve
-upstream source links. Keep employer, host, person, and credential data in the private layer.
+If the user asks you to change it, read `MAINTAINING.md`. Preserve upstream source links. Keep
+employer, host, person, and credential data in the private layer.
 
 Use `python3 -m unittest discover -s tests` as the canonical test command. Run `git diff --check`
 before you commit.
