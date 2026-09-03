@@ -20,19 +20,16 @@ PRIVATE="${PRIVATE_CONFIG:-$HOME/agents-cfg-private}"
 CLAUDE_DIR="$HOME/.claude"
 CODEX_DIR="$HOME/.codex"
 SHARED_SKILLS="$HOME/.agents/skills"
-DISABLED_SKILLS="$HOME/.agents/skills-disabled"
 PSTACK_DIR="${PSTACK_DIR:-$HOME/.local/share/agent-plugins/pstack-claude}"
 BIN="$HOME/.local/bin"
 
 python3 "$AC/scripts/skill_metadata.py" preflight-pstack "$PSTACK_DIR" "$AC/pstack-revision.txt"
-python3 "$AC/scripts/skill_metadata.py" preflight-ponytail "$AC/skills/ponytail" "$SHARED_SKILLS"
-python3 "$AC/scripts/skill_metadata.py" preflight-private-ponytail "$PRIVATE"
 PSTACK_RESOLVED="$(cd "$PSTACK_DIR" && pwd -P)"
 PSTACK_SKILLS="$PSTACK_RESOLVED/plugins/pstack/skills"
 PSTACK_PROMPTS="$PSTACK_RESOLVED/plugins/pstack/.codex-plugin/prompts"
 
-mkdir -p "$CLAUDE_DIR"/{skills,agents,hooks} "$CODEX_DIR"/{hooks,prompts} "$SHARED_SKILLS" "$DISABLED_SKILLS" "$BIN"
-chmod 700 "$SHARED_SKILLS" "$DISABLED_SKILLS"
+mkdir -p "$CLAUDE_DIR"/{skills,agents,hooks} "$CODEX_DIR"/{hooks,prompts} "$SHARED_SKILLS" "$BIN"
+chmod 700 "$SHARED_SKILLS"
 
 link() { # link <target> <linkname>
   [ -e "$1" ] || return 0
@@ -44,16 +41,10 @@ echo "== skills"
 if ! "$AC/bin/skills-sync" install-missing; then
   echo "  ! some cataloged skills could not be restored; continuing install" >&2
 fi
-python3 "$AC/scripts/skill_metadata.py" migrate-ponytail-quarantine \
-  "$SHARED_SKILLS" "$DISABLED_SKILLS"
-python3 "$AC/scripts/skill_metadata.py" install-ponytail \
-  "$AC/skills/ponytail" "$SHARED_SKILLS/ponytail" "$DISABLED_SKILLS"
 for d in "$AC"/skills/*/; do
-  [ "$(basename "$d")" = "ponytail" ] && continue
   link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"
 done
 [ -d "$PRIVATE/skills" ] && for d in "$PRIVATE"/skills/*/; do
-  [ "$(basename "$d")" = "ponytail" ] && continue
   link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"
 done
 python3 - "$SHARED_SKILLS" "$CODEX_DIR/prompts" "$PSTACK_SKILLS" "$PSTACK_PROMPTS" <<'PY'
@@ -126,6 +117,12 @@ for f in "$AC"/hooks/*;      do link "$f" "$CLAUDE_DIR/hooks/$(basename "$f")"; 
 for f in "$AC"/hooks/*;      do link "$f" "$CODEX_DIR/hooks/$(basename "$f")"; done
 
 echo "== bin"
+STALE_DELEGATE="$BIN/delegate"
+if [ -L "$STALE_DELEGATE" ]; then
+  rm -f "$STALE_DELEGATE"
+elif [ -e "$STALE_DELEGATE" ]; then
+  echo "  ! not a symlink, leaving alone: $STALE_DELEGATE"
+fi
 for f in "$AC"/bin/*;        do link "$f" "$BIN/$(basename "$f")"; done
 [ -d "$PRIVATE/bin" ] && for f in "$PRIVATE"/bin/*; do link "$f" "$BIN/$(basename "$f")"; done
 
@@ -150,21 +147,38 @@ link "$HOME/AGENTS.md" "$CODEX_DIR/AGENTS.md"
 link "$AC/configs/pstack-codex.md" "$CODEX_DIR/pstack-models.md"
 
 echo "== mcp servers (keys from env; nothing secret is stored in this repo)"
-if command -v claude >/dev/null && [ -f "$AC/mcp/servers.json" ]; then
+if [ -f "$AC/mcp/servers.json" ]; then
   python3 - "$AC/mcp/servers.json" <<'PY'
-import json,os,subprocess,sys
+import json, os, shutil, subprocess, sys
+
 for s in json.load(open(sys.argv[1]))["servers"]:
     name = s["name"]
     url = os.environ.get(s["url_env"]) if "url_env" in s else s["url"]
     if not url:
         print(f"  skip {name}: ${s['url_env']} not set"); continue
     env = s.get("header_env")
-    if env and not os.environ.get(env):
-        print(f"  skip {name}: ${env} not set"); continue
-    cmd=["claude","mcp","add","--scope","user","--transport","http",name,url]
-    if env: cmd += ["--header", f"{s['header_name']}: {os.environ[env]}"]
-    r=subprocess.run(cmd,capture_output=True,text=True)
-    print(f"  {'ok' if r.returncode==0 else 'exists/failed'} {name}")
+    if shutil.which("claude"):
+        if env and not os.environ.get(env):
+            print(f"  skip {name} for Claude: ${env} not set")
+        else:
+            cmd = ["claude", "mcp", "add", "--scope", "user", "--transport", "http", name, url]
+            if env:
+                cmd += ["--header", f"{s['header_name']}: {os.environ[env]}"]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            state = "ok" if result.returncode == 0 else "exists/failed"
+            print(f"  {state} {name} for Claude")
+    if shutil.which("codex"):
+        cmd = ["codex", "mcp", "add", name, "--url", url]
+        if env:
+            if s.get("header_name", "").lower() != "authorization":
+                print(
+                    f"  skip {name} for Codex: header {s['header_name']} is not bearer auth"
+                )
+                continue
+            cmd += ["--bearer-token-env-var", env]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        state = "ok" if result.returncode == 0 else "exists/failed"
+        print(f"  {state} {name} for Codex")
 PY
 fi
 

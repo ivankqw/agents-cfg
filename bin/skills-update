@@ -13,10 +13,8 @@ while [ -L "$SCRIPT" ]; do
 done
 AC="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
 SHARED_SKILLS="${SHARED_SKILLS:-$HOME/.agents/skills}"
-DISABLED_SKILLS="${DISABLED_SKILLS:-$HOME/.agents/skills-disabled}"
-python3 "$AC/scripts/skill_metadata.py" preflight-ponytail "$AC/skills/ponytail" "$SHARED_SKILLS"
-mkdir -p "$SHARED_SKILLS" "$DISABLED_SKILLS"
-chmod 700 "$SHARED_SKILLS" "$DISABLED_SKILLS"
+mkdir -p "$SHARED_SKILLS"
+chmod 700 "$SHARED_SKILLS"
 
 no_update=false
 restore_only=false
@@ -31,9 +29,6 @@ done
 NPX="$("$AC/bin/skills-sync" resolve-npx)"
 
 restore_metadata() {
-  python3 "$AC/scripts/skill_metadata.py" migrate-ponytail-quarantine "$SHARED_SKILLS" "$DISABLED_SKILLS"
-  python3 "$AC/scripts/skill_metadata.py" install-ponytail \
-    "$AC/skills/ponytail" "$SHARED_SKILLS/ponytail" "$DISABLED_SKILLS"
   python3 "$AC/scripts/skill_metadata.py" apply "$SHARED_SKILLS"
   python3 "$AC/scripts/skill_metadata.py" check "$SHARED_SKILLS"
   python3 "$AC/scripts/skill_metadata.py" unlock "$AC/skills-unlock.txt" "$SHARED_SKILLS"

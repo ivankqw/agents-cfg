@@ -1,6 +1,6 @@
 # Credits
 
-This repository keeps upstream work connected to its source. `skills-lock.json`,
+This repository keeps upstream work connected to its source. `skills-catalog.json`,
 `pstack-revision.txt`, and `NOTICE` record the code inputs.
 
 - [Garry Tan](https://github.com/garrytan/gbrain/blob/master/docs/ethos/THIN_HARNESS_FAT_SKILLS.md)
@@ -17,6 +17,7 @@ This repository keeps upstream work connected to its source. `skills-lock.json`,
   [treehouse](https://github.com/kunchenguid/treehouse) under the MIT License.
 - [Vercel Labs](https://github.com/vercel-labs/skills) supplies `find-skills`.
   The repository uses the MIT License.
+- [Herdr](https://github.com/herdrdev/herdr) supplies the terminal-pane runtime and its skill.
 - [Cursor](https://github.com/cursor/plugins) supplies `deslop`.
   The repository metadata states no license.
 - [Hardik Pandya](https://github.com/hardikpandya/stop-slop) created `stop-slop` under the MIT License.
@@ -33,7 +34,7 @@ This repository keeps upstream work connected to its source. `skills-lock.json`,
 - [Saurabh Kumar](https://github.com/saurabhkumar8112/cyclomatic-complexity-skill) supplies
   `cyclomatic-complexity` under the Apache-2.0 License.
 - [Dietrich Gebert](https://github.com/DietrichGebert/ponytail) supplies the five Ponytail report
-  skills restored from the pinned archive. `skills/ponytail/SKILL.md` records the MIT License.
+  skills restored from the pinned archive. The upstream files record the MIT License.
 - [OpenAI](https://github.com/openai) supplied the adversarial-review material adapted in
   `agents/reviewer.md`. `NOTICE` records the Apache License 2.0 terms for that material.
 

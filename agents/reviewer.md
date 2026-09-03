@@ -4,7 +4,7 @@ description: >-
   Adversarial reviewer for a change that is about to ship. Dispatch as a fresh
   agent with the repo path, the command that shows the diff, and what the change
   claims to do. Use before pushing non-trivial work.
-model: opus
+model: sonnet
 effort: max
 ---
 

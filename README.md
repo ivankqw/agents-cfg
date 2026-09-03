@@ -24,8 +24,6 @@ Read the documentation by purpose:
 - [Thesis](docs/THESIS.md) explains the personal overfitting argument.
 - [How it works](docs/HOW-IT-WORKS.md) explains each layer and its source file.
 - [Install](docs/INSTALL.md) installs, verifies, updates, and removes the setup.
-- [Skill sync](docs/SYNC.md) explains lockfile drift and the catalog workflow.
-- [Glossary](docs/GLOSSARY.md) defines the shared terms.
 - [Credits](docs/CREDITS.md) names upstream authors, sources, and licenses.
 - [Maintaining](MAINTAINING.md) gives repository editing and verification rules.
 

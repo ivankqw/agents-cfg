@@ -19,6 +19,20 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import skill_metadata
 
 
+TEST_SYSTEM_PATH = os.pathsep.join(("/usr/bin", "/bin"))
+
+
+def hermetic_test_path(fakebin: pathlib.Path) -> str:
+    path = os.pathsep.join((str(fakebin), TEST_SYSTEM_PATH))
+    for command in ("claude", "codex"):
+        resolved = shutil.which(command, path=path)
+        if resolved is None:
+            continue
+        if not pathlib.Path(resolved).resolve().is_relative_to(fakebin.resolve()):
+            raise RuntimeError(f"test PATH resolves real {command}: {resolved}")
+    return path
+
+
 FIXTURES = {
     "cyclomatic-complexity": textwrap.dedent(
         """\
@@ -108,38 +122,6 @@ FIXTURES = {
     ),
 }
 
-UPSTREAM_MAIN_PONYTAIL = textwrap.dedent(
-    """\
-    ---
-    name: ponytail
-    description: >
-      Forces the laziest solution that actually works, simplest, shortest, most
-      minimal. Channels a senior dev who has seen everything: question whether the
-      task needs to exist at all (YAGNI), reach for the standard library before
-      custom code, native platform features before dependencies, one line before
-      fifty. Supports intensity levels: lite, full (default), ultra. Use on ANY
-      coding task: writing, adding, refactoring, fixing, reviewing, or designing
-      code, and choosing libraries or dependencies.
-    argument-hint: "[lite|full|ultra]"
-    license: MIT
-    ---
-
-    # Ponytail
-    """
-)
-
-REPO_WRAPPER_PONYTAIL = textwrap.dedent(
-    """\
-    ---
-    name: ponytail
-    description: Use only when the user explicitly names Ponytail or asks to use the ponytail skill.
-    license: MIT
-    ---
-
-    # Ponytail
-    """
-)
-
 EXPECTED_OVERRIDE_NAMES = (
     "cyclomatic-complexity",
     "ponytail-audit",
@@ -160,11 +142,6 @@ class SkillMetadataTest(unittest.TestCase):
             skill_dir.mkdir(parents=True)
             (skill_dir / "SKILL.md").write_text(content)
         return root
-
-    def disabled_root_for(self, active_root: pathlib.Path) -> pathlib.Path:
-        disabled_root = active_root.parent / f"{active_root.name}-skills-disabled"
-        self.addCleanup(lambda: shutil.rmtree(disabled_root, ignore_errors=True))
-        return disabled_root
 
     def write_fake_git(self, fakebin: pathlib.Path, revision: str) -> None:
         git = fakebin / "git"
@@ -255,6 +232,39 @@ class SkillMetadataTest(unittest.TestCase):
         )
         npx.chmod(0o755)
 
+    def write_herdr_restore_npx(self, fakebin: pathlib.Path) -> None:
+        npx = fakebin / "npx"
+        npx.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "printf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n"
+            "case \"$FAKE_HERDR_STATE\" in\n"
+            "  valid)\n"
+            "    mkdir -p \"$HOME/.agents/skills/herdr\"\n"
+            "    printf '%s\\n' '---' 'name: herdr' 'description: Herdr.' '---' "
+            "> \"$HOME/.agents/skills/herdr/SKILL.md\"\n"
+            "    ;;\n"
+            "  missing) ;;\n"
+            "  decoy)\n"
+            "    mkdir -p \"$HOME/.agents/skills/herdr\"\n"
+            "    printf '%s\\n' '---' 'name: not-herdr' 'description: Decoy.' '---' "
+            "> \"$HOME/decoy-skill.md\"\n"
+            "    ln -s \"$HOME/decoy-skill.md\" \"$HOME/.agents/skills/herdr/SKILL.md\"\n"
+            "    ;;\n"
+            "  *) exit 98 ;;\n"
+            "esac\n"
+        )
+        npx.chmod(0o755)
+
+    def write_fake_mcp_clis(self, fakebin: pathlib.Path) -> None:
+        for name in ("claude", "codex"):
+            executable = fakebin / name
+            executable.write_text(
+                "#!/usr/bin/env bash\n"
+                f"printf '%s\\n' \"$*\" >> \"$HOME/{name}-mcp.args\"\n"
+            )
+            executable.chmod(0o755)
+
     def base_runtime_env(
         self,
         home: pathlib.Path,
@@ -265,7 +275,7 @@ class SkillMetadataTest(unittest.TestCase):
         revision = (ROOT / "pstack-revision.txt").read_text().splitlines()[0]
         env = os.environ.copy()
         env["HOME"] = str(home)
-        env["PATH"] = f"{fakebin}{os.pathsep}/usr/bin{os.pathsep}/bin"
+        env["PATH"] = hermetic_test_path(fakebin)
         env["PRIVATE_CONFIG"] = str(private or (home.parent / "missing-private"))
         env["PSTACK_DIR"] = str(pstack or (home.parent / "missing-pstack"))
         env["FAKE_PSTACK_REVISION"] = revision
@@ -399,105 +409,6 @@ class SkillMetadataTest(unittest.TestCase):
 
         self.assertEqual(once, (root / "ponytail-review" / "SKILL.md").read_text())
 
-    def test_install_ponytail_quarantines_known_upstream_collision(self) -> None:
-        root = self.create_root()
-        source = root / "repo-ponytail"
-        source.mkdir()
-        (source / "SKILL.md").write_text(REPO_WRAPPER_PONYTAIL)
-        destination = root / "ponytail"
-        destination.mkdir()
-        (destination / "SKILL.md").write_text(UPSTREAM_MAIN_PONYTAIL)
-        disabled_root = self.disabled_root_for(root)
-
-        skill_metadata.install_ponytail(source, destination, disabled_root)
-
-        self.assertTrue(destination.is_symlink())
-        self.assertEqual(destination.resolve(), source.resolve())
-        archived = disabled_root / "ponytail.upstream-disabled"
-        self.assertTrue(archived.is_dir())
-        self.assertIn("Use on ANY", (archived / "SKILL.md").read_text())
-        self.assertEqual(oct(disabled_root.stat().st_mode & 0o777), "0o700")
-        self.assertFalse(
-            any("upstream-disabled" in str(path.relative_to(root)) for path in root.rglob("SKILL.md"))
-        )
-
-    def test_legacy_upstream_quarantine_dirs_move_out_of_active_skill_root(self) -> None:
-        root = self.create_root()
-        legacy = root / "ponytail.upstream-disabled.7"
-        legacy.mkdir()
-        (legacy / "SKILL.md").write_text(UPSTREAM_MAIN_PONYTAIL)
-        current_source_bytes = b"current source payload\n"
-        (legacy / "payload.bin").write_bytes(current_source_bytes)
-        disabled_root = self.disabled_root_for(root)
-
-        messages = skill_metadata.migrate_legacy_ponytail_quarantines(root, disabled_root)
-
-        archived = disabled_root / "ponytail.upstream-disabled.7"
-        self.assertFalse(legacy.exists())
-        self.assertTrue(archived.is_dir())
-        self.assertEqual((archived / "payload.bin").read_bytes(), current_source_bytes)
-        self.assertIn("Use on ANY", (archived / "SKILL.md").read_text())
-        self.assertEqual(
-            messages,
-            [f"ponytail: moved legacy quarantine {legacy} to {archived}"],
-        )
-        self.assertFalse(
-            any(path.name.startswith("ponytail.upstream-disabled") for path in root.iterdir())
-        )
-
-    def test_legacy_quarantine_refuses_unknown_contents(self) -> None:
-        root = self.create_root()
-        legacy = root / "ponytail.upstream-disabled"
-        legacy.mkdir()
-        (legacy / "SKILL.md").write_text(
-            "---\nname: ponytail\ndescription: custom local content\n---\n"
-        )
-        disabled_root = self.disabled_root_for(root)
-
-        with self.assertRaisesRegex(RuntimeError, "unknown legacy ponytail quarantine"):
-            skill_metadata.migrate_legacy_ponytail_quarantines(root, disabled_root)
-
-        self.assertTrue(legacy.is_dir())
-        self.assertFalse(disabled_root.exists())
-
-    def test_install_ponytail_refuses_unknown_collision(self) -> None:
-        root = self.create_root()
-        source = root / "repo-ponytail"
-        source.mkdir()
-        (source / "SKILL.md").write_text(REPO_WRAPPER_PONYTAIL)
-        destination = root / "ponytail"
-        destination.mkdir()
-        (destination / "SKILL.md").write_text(
-            "---\nname: ponytail\ndescription: custom local content\n---\n"
-        )
-        disabled_root = self.disabled_root_for(root)
-
-        with self.assertRaisesRegex(RuntimeError, "refusing to replace non-symlink ponytail path"):
-            skill_metadata.install_ponytail(source, destination, disabled_root)
-
-        self.assertTrue(destination.is_dir())
-        self.assertFalse(destination.is_symlink())
-
-    def test_install_ponytail_refuses_unknown_symlink_collision(self) -> None:
-        root = self.create_root()
-        source = root / "repo-ponytail"
-        source.mkdir()
-        (source / "SKILL.md").write_text(REPO_WRAPPER_PONYTAIL)
-        private = root / "private-ponytail"
-        private.mkdir()
-        (private / "SKILL.md").write_text(
-            "---\nname: ponytail\ndescription: private local wrapper\n---\n"
-        )
-        destination = root / "ponytail"
-        destination.symlink_to(private)
-        disabled_root = self.disabled_root_for(root)
-
-        with self.assertRaisesRegex(RuntimeError, "refusing to retarget ponytail symlink"):
-            skill_metadata.install_ponytail(source, destination, disabled_root)
-
-        self.assertTrue(destination.is_symlink())
-        self.assertEqual(skill_metadata.symlink_target(destination).resolve(), private.resolve())
-
     def test_update_wrapper_reapplies_and_checks_metadata_after_npx_update(self) -> None:
         wrapper = ROOT / "bin" / "skills-update"
 
@@ -544,7 +455,7 @@ class SkillMetadataTest(unittest.TestCase):
 
         env = os.environ.copy()
         env["HOME"] = str(home)
-        env["PATH"] = f"{fakebin}{os.pathsep}{env['PATH']}"
+        env["PATH"] = hermetic_test_path(fakebin)
 
         result = subprocess.run(
             [str(ROOT / "bin" / "skills-update")],
@@ -589,79 +500,6 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertIn("Use only when the user explicitly names", ponytail_review)
         wayfinder = (shared / "wayfinder" / "SKILL.md").read_text()
         self.assertNotIn("disable-model-invocation: true", wayfinder)
-        self.assertEqual((shared / "ponytail").resolve(), (ROOT / "skills" / "ponytail").resolve())
-
-    def test_update_wrapper_refuses_unknown_ponytail_collision_before_npx(self) -> None:
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        home = pathlib.Path(tempdir.name) / "home"
-        shared = home / ".agents" / "skills"
-        fakebin = pathlib.Path(tempdir.name) / "bin"
-        shared.mkdir(parents=True)
-        fakebin.mkdir()
-        self.populate_imported_skills(shared)
-        ponytail = shared / "ponytail"
-        ponytail.mkdir()
-        (ponytail / "SKILL.md").write_text(
-            "---\nname: ponytail\ndescription: custom local ponytail\n---\n"
-        )
-        npx = fakebin / "npx"
-        npx.write_text(
-            "#!/usr/bin/env bash\n"
-            "printf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n"
-        )
-        npx.chmod(0o755)
-        env = self.base_runtime_env(home, fakebin)
-
-        result = subprocess.run(
-            [str(ROOT / "bin" / "skills-update")],
-            cwd=ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("refusing to replace non-symlink ponytail path", result.stderr + result.stdout)
-        self.assertFalse((home / "npx.args").exists())
-        self.assertTrue(ponytail.is_dir())
-
-    def test_update_wrapper_refuses_unknown_legacy_quarantine_before_npx(self) -> None:
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        home = pathlib.Path(tempdir.name) / "home"
-        shared = home / ".agents" / "skills"
-        fakebin = pathlib.Path(tempdir.name) / "bin"
-        shared.mkdir(parents=True)
-        fakebin.mkdir()
-        self.populate_imported_skills(shared)
-        legacy = shared / "ponytail.upstream-disabled"
-        legacy.mkdir()
-        (legacy / "SKILL.md").write_text(
-            "---\nname: ponytail\ndescription: custom local quarantine\n---\n"
-        )
-        npx = fakebin / "npx"
-        npx.write_text(
-            "#!/usr/bin/env bash\n"
-            "printf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n"
-        )
-        npx.chmod(0o755)
-        env = self.base_runtime_env(home, fakebin)
-
-        result = subprocess.run(
-            [str(ROOT / "bin" / "skills-update")],
-            cwd=ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("unknown legacy ponytail quarantine", result.stderr + result.stdout)
-        self.assertFalse((home / "npx.args").exists())
-        self.assertTrue(legacy.is_dir())
 
     def test_bootstrap_leaves_regular_home_skills_lock_unchanged(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
@@ -787,136 +625,65 @@ class SkillMetadataTest(unittest.TestCase):
 
         self.assertLess(text.index("preflight-pstack"), text.index('"$DEST/install.sh"'))
 
-    def test_bootstrap_runs_operator_state_preflight_before_pstack_mutation(self) -> None:
-        text = (ROOT / "bootstrap.sh").read_text()
+    def test_bootstrap_requires_restored_herdr_skill(self) -> None:
+        for state, expected_rc in (("valid", 0), ("missing", 1), ("decoy", 1)):
+            with self.subTest(state=state), tempfile.TemporaryDirectory() as temp:
+                root = pathlib.Path(temp)
+                home = root / "home"
+                shared = home / ".agents" / "skills"
+                fakebin = root / "bin"
+                shared.mkdir(parents=True)
+                fakebin.mkdir()
+                self.populate_imported_skills(shared)
+                skill_metadata.apply_overrides(shared)
+                shutil.rmtree(shared / "herdr")
+                pstack = self.create_fake_pstack_checkout(root)
+                self.write_fake_git(
+                    fakebin,
+                    (ROOT / "pstack-revision.txt").read_text().splitlines()[0],
+                )
+                self.write_herdr_restore_npx(fakebin)
+                self.write_fake_mcp_clis(fakebin)
+                env = self.base_runtime_env(home, fakebin, pstack=pstack)
+                env["AGENTS_CFG_DIR"] = str(ROOT)
+                env["FAKE_HERDR_STATE"] = state
+                env["CONTEXT7_API_KEY"] = "test-token"
+                env["EXECUTOR_MCP_URL"] = "https://executor.example/mcp"
 
-        self.assertIn(
-            '  preflight_operator_state\n'
-            '  echo "== fetching pinned pstack revision"\n'
-            '  git -C "$PSTACK_DIR" fetch origin "$PSTACK_REVISION"',
-            text,
-        )
-        self.assertIn(
-            '  preflight_operator_state\n'
-            '  echo "== cloning pstack into $PSTACK_DIR"\n'
-            '  mkdir -p "$(dirname "$PSTACK_DIR")"',
-            text,
-        )
-        self.assertIn(
-            'fi\n'
-            'preflight_operator_state\n'
-            'git -C "$PSTACK_DIR" checkout --detach "$PSTACK_REVISION"',
-            text,
-        )
+                result = subprocess.run(
+                    [str(ROOT / "bootstrap.sh")],
+                    cwd=ROOT,
+                    env=env,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
 
-    def test_bootstrap_refuses_private_ponytail_before_npx(self) -> None:
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        root = pathlib.Path(tempdir.name)
-        home = root / "home"
-        shared = home / ".agents" / "skills"
-        fakebin = root / "bin"
-        private = root / "private"
-        private_ponytail = private / "skills" / "ponytail"
-        home.mkdir()
-        shared.mkdir(parents=True)
-        fakebin.mkdir()
-        private_ponytail.mkdir(parents=True)
-        (private_ponytail / "SKILL.md").write_text(
-            "---\nname: ponytail\ndescription: private ponytail\n---\n"
-        )
-        pstack = self.create_fake_pstack_checkout(root)
-        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
-        npx = fakebin / "npx"
-        npx.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n")
-        npx.chmod(0o755)
-        env = self.base_runtime_env(home, fakebin, pstack=pstack, private=private)
-        env["AGENTS_CFG_DIR"] = str(ROOT)
+                output = result.stderr + result.stdout
+                self.assertEqual(
+                    (home / "claude-mcp.args").read_text(),
+                    "mcp add --scope user --transport http context7 https://mcp.context7.com/mcp "
+                    "--header CONTEXT7_API_KEY: test-token\n"
+                    "mcp add --scope user --transport http exa https://mcp.exa.ai/mcp\n"
+                    "mcp add --scope user --transport http linear-server https://mcp.linear.app/mcp\n"
+                    "mcp add --scope user --transport http executor https://executor.example/mcp\n",
+                )
+                self.assertEqual(
+                    (home / "codex-mcp.args").read_text(),
+                    "mcp add exa --url https://mcp.exa.ai/mcp\n"
+                    "mcp add linear-server --url https://mcp.linear.app/mcp\n"
+                    "mcp add executor --url https://executor.example/mcp\n",
+                )
+                self.assertEqual(result.returncode, expected_rc, output)
+                if state == "missing":
+                    self.assertIn("missing catalog skill: herdr", output)
+                elif expected_rc:
+                    self.assertIn("Herdr restore failed", output)
+                else:
+                    self.assertIn("== done", output)
 
-        result = subprocess.run(
-            [str(ROOT / "bootstrap.sh")],
-            cwd=ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("refusing private ponytail override", result.stderr + result.stdout)
-        self.assertFalse((home / "npx.args").exists())
-
-    def test_bootstrap_refuses_unknown_active_ponytail_before_npx(self) -> None:
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        root = pathlib.Path(tempdir.name)
-        home = root / "home"
-        shared = home / ".agents" / "skills"
-        fakebin = root / "bin"
-        home.mkdir()
-        shared.mkdir(parents=True)
-        fakebin.mkdir()
-        ponytail = shared / "ponytail"
-        ponytail.mkdir()
-        (ponytail / "SKILL.md").write_text(
-            "---\nname: ponytail\ndescription: custom active ponytail\n---\n"
-        )
-        pstack = self.create_fake_pstack_checkout(root)
-        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
-        npx = fakebin / "npx"
-        npx.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n")
-        npx.chmod(0o755)
-        env = self.base_runtime_env(home, fakebin, pstack=pstack)
-        env["AGENTS_CFG_DIR"] = str(ROOT)
-
-        result = subprocess.run(
-            [str(ROOT / "bootstrap.sh")],
-            cwd=ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("refusing to replace non-symlink ponytail path", result.stderr + result.stdout)
-        self.assertFalse((home / "npx.args").exists())
-
-    def test_bootstrap_refuses_unknown_legacy_quarantine_before_npx(self) -> None:
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        root = pathlib.Path(tempdir.name)
-        home = root / "home"
-        shared = home / ".agents" / "skills"
-        fakebin = root / "bin"
-        home.mkdir()
-        shared.mkdir(parents=True)
-        fakebin.mkdir()
-        legacy = shared / "ponytail.upstream-disabled"
-        legacy.mkdir()
-        (legacy / "SKILL.md").write_text(
-            "---\nname: ponytail\ndescription: unknown legacy quarantine\n---\n"
-        )
-        pstack = self.create_fake_pstack_checkout(root)
-        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
-        npx = fakebin / "npx"
-        npx.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n")
-        npx.chmod(0o755)
-        env = self.base_runtime_env(home, fakebin, pstack=pstack)
-        env["AGENTS_CFG_DIR"] = str(ROOT)
-
-        result = subprocess.run(
-            [str(ROOT / "bootstrap.sh")],
-            cwd=ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("unknown legacy ponytail quarantine", result.stderr + result.stdout)
-        self.assertFalse((home / "npx.args").exists())
+        catalog = json.loads((ROOT / "skills-catalog.json").read_text())
+        self.assertEqual(catalog["skills"]["herdr"]["source"], "herdrdev/herdr")
 
     def test_bootstrap_uses_install_for_catalog_restore(self) -> None:
         text = (ROOT / "bootstrap.sh").read_text()
@@ -1015,39 +782,6 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertFalse((home / "skills-lock.json").exists())
         self.assertFalse((home / ".agents").exists())
 
-    def test_install_refuses_private_ponytail_before_shared_links(self) -> None:
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        root = pathlib.Path(tempdir.name)
-        home = root / "home"
-        shared = home / ".agents" / "skills"
-        fakebin = root / "bin"
-        private = root / "private"
-        private_ponytail = private / "skills" / "ponytail"
-        fakebin.mkdir()
-        shared.mkdir(parents=True)
-        self.populate_imported_skills(shared)
-        private_ponytail.mkdir(parents=True)
-        (private_ponytail / "SKILL.md").write_text(
-            "---\nname: ponytail\ndescription: private ponytail\n---\n"
-        )
-        pstack = self.create_fake_pstack_checkout(root)
-        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
-        env = self.base_runtime_env(home, fakebin, pstack=pstack, private=private)
-
-        result = subprocess.run(
-            [str(ROOT / "install.sh")],
-            cwd=ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("refusing private ponytail override", result.stderr + result.stdout)
-        self.assertFalse((shared / "ponytail").exists())
-
     def test_install_succeeds_in_temp_home_with_valid_preflight(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
@@ -1063,7 +797,10 @@ class SkillMetadataTest(unittest.TestCase):
         npx = fakebin / "npx"
         npx.write_text("#!/usr/bin/env bash\nexit 0\n")
         npx.chmod(0o755)
+        self.write_fake_mcp_clis(fakebin)
         env = self.base_runtime_env(home, fakebin, pstack=pstack)
+        env["CONTEXT7_API_KEY"] = "test-token"
+        env["EXECUTOR_MCP_URL"] = "https://executor.example/mcp"
 
         result = subprocess.run(
             [str(ROOT / "install.sh")],
@@ -1076,49 +813,27 @@ class SkillMetadataTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertFalse((home / "skills-lock.json").exists())
-        self.assertEqual((shared / "ponytail").resolve(), (ROOT / "skills" / "ponytail").resolve())
-        self.assertFalse((shared / "ponytail.upstream-disabled").exists())
-
-    def test_install_refuses_unknown_legacy_quarantine_before_linking_repo_wrapper(self) -> None:
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        root = pathlib.Path(tempdir.name)
-        home = root / "home"
-        shared = home / ".agents" / "skills"
-        fakebin = root / "bin"
-        fakebin.mkdir()
-        shared.mkdir(parents=True)
-        legacy = shared / "ponytail.upstream-disabled"
-        legacy.mkdir()
-        (legacy / "SKILL.md").write_text(
-            "---\nname: ponytail\ndescription: custom local quarantine\n---\n"
+        claude_args = (home / "claude-mcp.args").read_text()
+        self.assertIn(
+            "mcp add --scope user --transport http context7 https://mcp.context7.com/mcp "
+            "--header CONTEXT7_API_KEY: test-token",
+            claude_args,
         )
-        pstack = self.create_fake_pstack_checkout(root)
-        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
-        env = self.base_runtime_env(home, fakebin, pstack=pstack)
-
-        result = subprocess.run(
-            [str(ROOT / "install.sh")],
-            cwd=ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
+        self.assertIn(
+            "mcp add --scope user --transport http executor https://executor.example/mcp",
+            claude_args,
         )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("unknown legacy ponytail quarantine", result.stderr + result.stdout)
-        self.assertTrue(legacy.is_dir())
-        self.assertFalse((shared / "ponytail").exists())
-        self.assertFalse((shared / "ponytail").is_symlink())
-
-    def test_install_moves_legacy_quarantines_before_claude_skill_links(self) -> None:
-        text = (ROOT / "install.sh").read_text()
-
-        migrate = text.index("migrate-ponytail-quarantine")
-        claude_links = text.index('for d in "$SHARED_SKILLS"/*/; do link')
-
-        self.assertLess(migrate, claude_links)
+        codex_args = (home / "codex-mcp.args").read_text()
+        self.assertIn("mcp add exa --url https://mcp.exa.ai/mcp", codex_args)
+        self.assertIn(
+            "mcp add executor --url https://executor.example/mcp",
+            codex_args,
+        )
+        self.assertNotIn("context7", codex_args)
+        self.assertIn(
+            "skip context7 for Codex: header CONTEXT7_API_KEY is not bearer auth",
+            result.stdout,
+        )
 
     def test_install_and_update_paths_share_unlock_command(self) -> None:
         install = (ROOT / "install.sh").read_text()

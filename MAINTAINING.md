@@ -38,6 +38,8 @@ git diff skills-catalog.json
 Add intentionally untracked skill names to `skills-ignore.txt`. Use one glob per line. The
 normalizer excludes matching lockfile entries, and the checker ignores matching installed folders.
 The larksuite skills stay outside the committed catalog because they are managed separately.
+The skills CLI normally writes its lockfile to `~/.agents/.skill-lock.json`. `XDG_STATE_HOME` changes
+that location. `SKILLS_LOCK_FILE` overrides both locations.
 The normalizer preserves catalog entries that are absent from the current machine. It prints each
 proposed removal. Review those names before you run `bin/skills-sync normalize --allow-removals`.
 
@@ -47,9 +49,6 @@ the installer continues to link the agent configuration.
 If an imported skill must stay explicit-use-only, add or update its description override in
 `scripts/skill_metadata.py`. `install.sh` applies and checks those overrides in `~/.agents/skills`
 after each restore or update, so Codex sees the constrained triggers.
-That script also owns the special-case `ponytail` collision handling: replace only the known broad
-upstream main skill, quarantine it into `~/.agents/skills-disabled/`, and stop with an operator
-action for any other non-symlink `ponytail` path.
 
 ## Let a skill invoke another skill
 
@@ -147,8 +146,8 @@ to generated Codex instructions because Codex does not support Claude `@imports`
   `bin/skills-sync normalize`.
 - **BSD and GNU differ.** `date -Iseconds`, `readlink -f`, `stat -c` and `sed -i` all behave
   differently on macOS. Prefer plain format strings.
-- **Harness direction is not symmetric.** Claude can call the Codex reviewer plugin. Codex has no
-  reciprocal Claude plugin. Select `single-vendor` when Codex owns the session.
+- **Harness direction is not symmetric.** The default config needs Claude Code to dispatch the
+  Sonnet reviewer. Select `single-vendor` when Claude is unavailable.
 
 ## Before you say it works
 
