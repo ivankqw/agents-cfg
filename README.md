@@ -31,9 +31,9 @@ git clone https://github.com/ivankqw/agents-cfg.git ~/agents-cfg
 |---|---|---|---|---|
 | Use a strong base | Harness | Claude Code, Codex; Hermes is experimental `[unverified]` | Flexible | [`configs/`](configs/), [`settings/`](settings/), or the private layer |
 | Keep execution visible | Tracker and execution | Linear | Flexible | [`mcp/servers.json`](mcp/servers.json) and the private layer |
-| Carry one tool catalog | Agent-connection portability | Executor Cloud through MCP; Claude install today | Flexible | [`mcp/servers.json`](mcp/servers.json) |
+| Carry one tool catalog | Agent-connection portability | Executor Cloud through MCP | Flexible | [`mcp/servers.json`](mcp/servers.json) |
 | Keep agents in view | Agent runtime | Herdr | Flexible | Private layer |
-| Load the method on demand | Skills | pstack and Matt Pocock's skills | Flexible, with pinned sources | [`pstack-revision.txt`](pstack-revision.txt) and [`skills-lock.json`](skills-lock.json) |
+| Load the method on demand | Skills | pstack and Matt Pocock's skills | Flexible, with pinned sources | [`pstack-revision.txt`](pstack-revision.txt) and [`bootstrap.sh`](bootstrap.sh) |
 | Isolate each checkout | Worktrees | `wt` and treehouse; `pnpm` or `uv` per project | Flexible per project | Private layer |
 | Change the blind spots | Review independence | Different vendor first; different model fallback | Fixed independence rule | [`conventions/AGENTS.md`](conventions/AGENTS.md) and [`configs/`](configs/) |
 | Spend context on defaults | Conventions | Always loaded `[unverified]` and under 200 lines `[sourced: MAINTAINING.md]` | Fixed rule | [`conventions/AGENTS.md`](conventions/AGENTS.md) and [`install.sh`](install.sh) |
@@ -55,15 +55,15 @@ flowchart TB
 
 ## usage
 
-I run these from my full machine setup. The portable bootstrap does not install Herdr or
-[backpass](https://github.com/kunchenguid/backpass). `[sourced: bootstrap.sh]`
+I run these from my full machine setup. The portable bootstrap does not install the Herdr or
+[backpass](https://github.com/kunchenguid/backpass) runtimes. `[sourced: bootstrap.sh]`
 
 ```text
-herdr agent prompt codex "Take this lane's issue brief. Run /ship and stop after the draft PR." --wait
+herdr agent prompt codex "Take this lane's issue brief. Use the implement skill, then open a draft PR." --wait
 ```
 
 ```text
-/ship the issue linked in this chat. Stop after the draft PR.
+/code-review origin/main
 ```
 
 ```bash
@@ -91,6 +91,7 @@ I write a skill when no upstream skill covers the job.
 | source and credit | skills |
 |---|---|
 | [pstack by Lauren "poteto" Tan, contributors, and Michael Denyer's Claude port](https://github.com/michael-denyer/pstack-claude) | Routing, review, verification, agent workflows, and engineering principles. |
+| [Herdr](https://github.com/herdrdev/herdr) | `herdr`. |
 | [Matt Pocock](https://github.com/mattpocock/skills) | `ask-matt`, `code-review`, `codebase-design`, `diagnosing-bugs`, `domain-modeling`, `grill-me`, `grill-with-docs`, `grilling`, `handoff`, `implement`, `improve-codebase-architecture`, `prototype`, `research`, `resolving-merge-conflicts`, `setup-matt-pocock-skills`, `tdd`, `teach`, `to-questionnaire`, `to-spec`, `to-tickets`, `triage`, `wait-what`, `wayfinder`, `wizard`, `writing-for-agents`. |
 | [Vercel Labs](https://github.com/vercel-labs/skills) | `find-skills`. |
 | [Cursor](https://github.com/cursor/plugins) | `deslop`. |
@@ -115,3 +116,5 @@ I write a skill when no upstream skill covers the job.
 
 Fork this setup and overfit it to yourself. Keep what fits your work and replace my assumptions with
 yours.
+
+The repository uses the MIT License. See [LICENSE](LICENSE). `NOTICE` records adapted material.
