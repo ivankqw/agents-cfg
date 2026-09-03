@@ -8,7 +8,7 @@ description: >-
   four diff reviews missed, because the wrong code path looked right. Fires
   on a single frontend pass, and equally on a batch frontier of rendered-surface
   branches — dogfood the whole batch from one integration worktree instead of
-  shipping a PR per look. Replaces deciding on production.
+  opening a PR per look. Replaces deciding on production.
 ---
 
 # Dogfood local
@@ -30,9 +30,8 @@ Skip it for backend-only work with no rendered surface.
 
 ## 1. Gate the pass first
 
-Run the craft gates before you look at the change, on each pass rather than once at the end. The
-`ship` skill's build phase lists them. A pass that skips them tends to produce the change the next
-dogfooding session reverts.
+Run the project's craft gates before you look at the change. Run them on each pass, not only at the
+end. A pass that skips them tends to produce the change the next dogfooding session reverts.
 
 **Done when** the gates have run and their findings are fixed or written down with a reason.
 
@@ -42,9 +41,8 @@ When several branches are in flight, merge every one into a single throwaway wor
 anything. Dogfooding one branch alone risks judging a screen no user will ever see, and hides the
 breakage that appears only when the branches meet.
 
-Use the project's own worktree helper if it has one, so gitignored config comes across;
-`../../templates/worktree-helper.md`, at the repo root of this skill's own repository, describes what
-such a helper does. Otherwise:
+Use the project's worktree helper so gitignored configuration comes across. If the project has no
+worktree helper, use Git directly:
 
 ```bash
 git worktree add ../<name>-dogfood -b integration/<name>-dogfood origin/main

@@ -20,19 +20,16 @@ PRIVATE="${PRIVATE_CONFIG:-$HOME/agents-cfg-private}"
 CLAUDE_DIR="$HOME/.claude"
 CODEX_DIR="$HOME/.codex"
 SHARED_SKILLS="$HOME/.agents/skills"
-DISABLED_SKILLS="$HOME/.agents/skills-disabled"
 PSTACK_DIR="${PSTACK_DIR:-$HOME/.local/share/agent-plugins/pstack-claude}"
 BIN="$HOME/.local/bin"
 
 python3 "$AC/scripts/skill_metadata.py" preflight-pstack "$PSTACK_DIR" "$AC/pstack-revision.txt"
-python3 "$AC/scripts/skill_metadata.py" preflight-ponytail "$AC/skills/ponytail" "$SHARED_SKILLS"
-python3 "$AC/scripts/skill_metadata.py" preflight-private-ponytail "$PRIVATE"
 PSTACK_RESOLVED="$(cd "$PSTACK_DIR" && pwd -P)"
 PSTACK_SKILLS="$PSTACK_RESOLVED/plugins/pstack/skills"
 PSTACK_PROMPTS="$PSTACK_RESOLVED/plugins/pstack/.codex-plugin/prompts"
 
-mkdir -p "$CLAUDE_DIR"/{skills,agents,hooks} "$CODEX_DIR"/{hooks,prompts} "$SHARED_SKILLS" "$DISABLED_SKILLS" "$BIN"
-chmod 700 "$SHARED_SKILLS" "$DISABLED_SKILLS"
+mkdir -p "$CLAUDE_DIR"/{skills,agents,hooks} "$CODEX_DIR"/{hooks,prompts} "$SHARED_SKILLS" "$BIN"
+chmod 700 "$SHARED_SKILLS"
 
 link() { # link <target> <linkname>
   [ -e "$1" ] || return 0
@@ -44,16 +41,10 @@ echo "== skills"
 if ! "$AC/bin/skills-sync" install-missing; then
   echo "  ! some cataloged skills could not be restored; continuing install" >&2
 fi
-python3 "$AC/scripts/skill_metadata.py" migrate-ponytail-quarantine \
-  "$SHARED_SKILLS" "$DISABLED_SKILLS"
-python3 "$AC/scripts/skill_metadata.py" install-ponytail \
-  "$AC/skills/ponytail" "$SHARED_SKILLS/ponytail" "$DISABLED_SKILLS"
 for d in "$AC"/skills/*/; do
-  [ "$(basename "$d")" = "ponytail" ] && continue
   link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"
 done
 [ -d "$PRIVATE/skills" ] && for d in "$PRIVATE"/skills/*/; do
-  [ "$(basename "$d")" = "ponytail" ] && continue
   link "${d%/}" "$SHARED_SKILLS/$(basename "$d")"
 done
 python3 - "$SHARED_SKILLS" "$CODEX_DIR/prompts" "$PSTACK_SKILLS" "$PSTACK_PROMPTS" <<'PY'

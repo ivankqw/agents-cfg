@@ -33,7 +33,7 @@ This repository keeps upstream work connected to its source. `skills-lock.json`,
 - [Saurabh Kumar](https://github.com/saurabhkumar8112/cyclomatic-complexity-skill) supplies
   `cyclomatic-complexity` under the Apache-2.0 License.
 - [Dietrich Gebert](https://github.com/DietrichGebert/ponytail) supplies the five Ponytail report
-  skills restored from the pinned archive. `skills/ponytail/SKILL.md` records the MIT License.
+  skills restored from the pinned archive. The upstream files record the MIT License.
 - [OpenAI](https://github.com/openai) supplied the adversarial-review material adapted in
   `agents/reviewer.md`. `NOTICE` records the Apache License 2.0 terms for that material.
 

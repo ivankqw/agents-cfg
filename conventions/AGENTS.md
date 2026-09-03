@@ -158,6 +158,7 @@ these as passes; the rules matter on their own.
 ## Branches and PRs
 
 - Prefix branches `feat/`, `fix/`, `refactor/`, `docs/`, `chore/`. Never a personal prefix.
+- Open pull requests as drafts.
 - Before pushing, check `git status --short --branch`, keep commits focused, leave no temp files, and
   rebase on the default branch if you have drifted.
 - PR body sections: copy the repo's PR template headings exactly; CI can gate on the text. With no

@@ -8,7 +8,6 @@ import json
 import os
 import pathlib
 import re
-import shutil
 import subprocess
 import sys
 from typing import Iterable
@@ -46,14 +45,6 @@ EXPLICIT_USE_DESCRIPTIONS = {
         "refactoring, or simplification requests."
     ),
 }
-
-UPSTREAM_MAIN_PONYTAIL_ANCHORS = (
-    "name: ponytail",
-    'argument-hint: "[lite|full|ultra]"',
-    "Supports intensity levels: lite, full (default), ultra.",
-    "Use on ANY",
-)
-
 
 def split_frontmatter(text: str) -> tuple[list[str], str]:
     lines = text.splitlines(keepends=True)
@@ -104,133 +95,6 @@ def symlink_target(path: pathlib.Path) -> pathlib.Path:
     return target
 
 
-def looks_like_upstream_main_ponytail(path: pathlib.Path) -> bool:
-    skill = path / "SKILL.md"
-    if not skill.is_file():
-        return False
-    text = skill.read_text()
-    return all(anchor in text for anchor in UPSTREAM_MAIN_PONYTAIL_ANCHORS)
-
-
-def ensure_disabled_root(path: pathlib.Path) -> None:
-    path.mkdir(mode=0o700, parents=True, exist_ok=True)
-    path.chmod(0o700)
-
-
-def quarantine_path(disabled_root: pathlib.Path, name: str) -> pathlib.Path:
-    ensure_disabled_root(disabled_root)
-    stem = disabled_root / f"{name}.upstream-disabled"
-    if not stem.exists():
-        return stem
-    index = 1
-    while True:
-        candidate = disabled_root / f"{name}.upstream-disabled.{index}"
-        if not candidate.exists():
-            return candidate
-        index += 1
-
-
-def legacy_quarantine_path(disabled_root: pathlib.Path, name: str) -> pathlib.Path:
-    ensure_disabled_root(disabled_root)
-    candidate = disabled_root / name
-    if not candidate.exists():
-        return candidate
-    index = 1
-    while True:
-        candidate = disabled_root / f"{name}.{index}"
-        if not candidate.exists():
-            return candidate
-        index += 1
-
-
-def migrate_legacy_ponytail_quarantines(
-    active_root: pathlib.Path, disabled_root: pathlib.Path
-) -> list[str]:
-    validate_legacy_ponytail_quarantines(active_root)
-
-    if not active_root.is_dir():
-        raise FileNotFoundError(f"missing active skill root: {active_root}")
-
-    results: list[str] = []
-    candidates = sorted(
-        path
-        for path in active_root.iterdir()
-        if path.name == "ponytail.upstream-disabled"
-        or path.name.startswith("ponytail.upstream-disabled.")
-    )
-    for path in candidates:
-        archived = legacy_quarantine_path(disabled_root, path.name)
-        shutil.move(str(path), str(archived))
-        results.append(f"ponytail: moved legacy quarantine {path} to {archived}")
-    return results
-
-
-def validate_legacy_ponytail_quarantines(
-    active_root: pathlib.Path, missing_ok: bool = False
-) -> list[str]:
-    if not active_root.is_dir():
-        if missing_ok:
-            return [f"ponytail: no active skill root at {active_root}"]
-        raise FileNotFoundError(f"missing active skill root: {active_root}")
-
-    candidates = sorted(
-        path
-        for path in active_root.iterdir()
-        if path.name == "ponytail.upstream-disabled"
-        or path.name.startswith("ponytail.upstream-disabled.")
-    )
-    for path in candidates:
-        if not path.is_dir() or path.is_symlink() or not looks_like_upstream_main_ponytail(path):
-            raise RuntimeError(
-                "unknown legacy ponytail quarantine "
-                f"{path}. Move it aside manually before install can link Claude skills."
-            )
-    return [f"ponytail: legacy quarantine preflight ok in {active_root}"]
-
-
-def validate_ponytail_install(source: pathlib.Path, destination: pathlib.Path) -> list[str]:
-    if not source.exists():
-        raise FileNotFoundError(f"missing ponytail source: {source}")
-
-    if destination.is_symlink():
-        current_target = symlink_target(destination).resolve(strict=False)
-        desired_target = source.resolve(strict=False)
-        if current_target == desired_target:
-            return [f"ponytail: symlink preflight ok at {destination}"]
-        raise RuntimeError(
-            "refusing to retarget ponytail symlink "
-            f"{destination} -> {symlink_target(destination)}. "
-            f"Move it aside manually before linking the repo wrapper at {source}."
-        )
-
-    if not destination.exists():
-        return [f"ponytail: destination available at {destination}"]
-
-    if destination.is_dir() and looks_like_upstream_main_ponytail(destination):
-        return [f"ponytail: known upstream collision at {destination}"]
-
-    raise RuntimeError(
-        "refusing to replace non-symlink ponytail path "
-        f"{destination}. Move it aside, or replace it with the repo wrapper at {source}."
-    )
-
-
-def validate_ponytail_preflight(source: pathlib.Path, active_root: pathlib.Path) -> list[str]:
-    results = validate_legacy_ponytail_quarantines(active_root, missing_ok=True)
-    results.extend(validate_ponytail_install(source, active_root / "ponytail"))
-    return results
-
-
-def validate_no_private_ponytail(private_root: pathlib.Path) -> list[str]:
-    private_ponytail = private_root / "skills" / "ponytail"
-    if os.path.lexists(private_ponytail):
-        raise RuntimeError(
-            "refusing private ponytail override "
-            f"{private_ponytail}. Move it aside; the repo wrapper owns the ponytail skill."
-        )
-    return [f"ponytail: no private override at {private_ponytail}"]
-
-
 def read_pstack_revision(revision_file: pathlib.Path) -> str:
     lines = revision_file.read_text().splitlines()
     revision = lines[0] if lines else ""
@@ -272,30 +136,6 @@ def validate_pstack_checkout(pstack_dir: pathlib.Path, revision_file: pathlib.Pa
         raise RuntimeError(f"pstack checkout does not contain the expected plugin layout: {pstack_dir}")
 
     return [f"pstack: checkout preflight ok at {pstack_dir}"]
-
-
-def install_ponytail(
-    source: pathlib.Path, destination: pathlib.Path, disabled_root: pathlib.Path
-) -> list[str]:
-    validate_ponytail_install(source, destination)
-
-    if destination.is_symlink():
-        return [f"ponytail: already linked to {source}"]
-
-    if not destination.exists():
-        destination.symlink_to(source)
-        return [f"ponytail: linked {destination} -> {source}"]
-
-    if destination.is_dir() and looks_like_upstream_main_ponytail(destination):
-        archived = quarantine_path(disabled_root, destination.name)
-        shutil.move(str(destination), str(archived))
-        destination.symlink_to(source)
-        return [
-            f"ponytail: quarantined broad upstream skill to {archived}",
-            f"ponytail: linked {destination} -> {source}",
-        ]
-
-    raise RuntimeError("unreachable ponytail install state")
 
 
 def apply_overrides(root: pathlib.Path) -> list[str]:
@@ -376,11 +216,7 @@ def main(argv: list[str]) -> int:
         choices=(
             "apply",
             "check",
-            "install-ponytail",
-            "migrate-ponytail-quarantine",
             "preflight-pstack",
-            "preflight-ponytail",
-            "preflight-private-ponytail",
             "unlock",
         ),
     )
@@ -393,35 +229,11 @@ def main(argv: list[str]) -> int:
         return [pathlib.Path(value) for value in args.paths]
 
     try:
-        if args.command == "preflight-ponytail":
-            source, active_root = require_paths(2, "preflight-ponytail requires source and active-root")
-            emit(validate_ponytail_preflight(source, active_root))
-            return 0
-
         if args.command == "preflight-pstack":
             pstack_dir, revision_file = require_paths(
                 2, "preflight-pstack requires pstack-dir and revision-file"
             )
             emit(validate_pstack_checkout(pstack_dir, revision_file))
-            return 0
-
-        if args.command == "preflight-private-ponytail":
-            (private_root,) = require_paths(1, "preflight-private-ponytail requires private-root")
-            emit(validate_no_private_ponytail(private_root))
-            return 0
-
-        if args.command == "install-ponytail":
-            source, destination, disabled_root = require_paths(
-                3, "install-ponytail requires source, destination, and disabled-root"
-            )
-            emit(install_ponytail(source, destination, disabled_root))
-            return 0
-
-        if args.command == "migrate-ponytail-quarantine":
-            active_root, disabled_root = require_paths(
-                2, "migrate-ponytail-quarantine requires active-root and disabled-root"
-            )
-            emit(migrate_legacy_ponytail_quarantines(active_root, disabled_root))
             return 0
 
         if args.command == "unlock":
