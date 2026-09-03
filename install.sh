@@ -41,7 +41,9 @@ link() { # link <target> <linkname>
 }
 
 echo "== skills"
-"$AC/bin/skills-sync" install-missing
+if ! "$AC/bin/skills-sync" install-missing; then
+  echo "  ! some cataloged skills could not be restored; continuing install" >&2
+fi
 python3 "$AC/scripts/skill_metadata.py" migrate-ponytail-quarantine \
   "$SHARED_SKILLS" "$DISABLED_SKILLS"
 python3 "$AC/scripts/skill_metadata.py" install-ponytail \

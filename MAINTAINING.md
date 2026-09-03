@@ -38,8 +38,11 @@ git diff skills-catalog.json
 Add intentionally untracked skill names to `skills-ignore.txt`. Use one glob per line. The
 normalizer excludes matching lockfile entries, and the checker ignores matching installed folders.
 The larksuite skills stay outside the committed catalog because they are managed separately.
-The normalizer retains existing `download` entries. The skills CLI does not record archive installs
-in its live lockfile, so remove an obsolete archive entry from the catalog by hand.
+The normalizer preserves catalog entries that are absent from the current machine. It prints each
+proposed removal. Review those names before you run `bin/skills-sync normalize --allow-removals`.
+
+`install.sh` tries every missing catalog skill. A failed third-party restore prints a warning, but
+the installer continues to link the agent configuration.
 
 If an imported skill must stay explicit-use-only, add or update its description override in
 `scripts/skill_metadata.py`. `install.sh` applies and checks those overrides in `~/.agents/skills`

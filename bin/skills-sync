@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import hashlib
 import json
 import os
 import pathlib
 import platform
+import re
 import shlex
 import shutil
 import socket
@@ -41,6 +43,12 @@ def live_lock_path() -> pathlib.Path:
         if path.is_file():
             return path
         raise FileNotFoundError(f"configured skills CLI lockfile not found at {path}")
+    xdg_state_home = os.environ.get("XDG_STATE_HOME")
+    if xdg_state_home:
+        path = pathlib.Path(xdg_state_home) / "skills" / ".skill-lock.json"
+        if path.is_file():
+            return path
+        raise FileNotFoundError(f"skills CLI lockfile not found at {path}")
     home = pathlib.Path.home()
     primary = home / ".agents" / ".skill-lock.json"
     if primary.is_file():
@@ -76,8 +84,7 @@ def is_ignored(name: str, patterns: tuple[str, ...]) -> bool:
 def normalized_catalog(
     lock: object,
     ignore_patterns: tuple[str, ...] = (),
-    retained_entries: dict[str, dict[str, str]] | None = None,
-) -> dict[str, object]:
+) -> dict[str, dict[str, dict[str, str]]]:
     if not isinstance(lock, dict) or not isinstance(lock.get("skills"), dict):
         raise ValueError("live lockfile must contain a skills object")
     raw_skills = lock["skills"]
@@ -86,11 +93,7 @@ def normalized_catalog(
         for name, entry in raw_skills.items()
     ):
         raise ValueError("live lockfile contains an invalid skill entry")
-    skills = {
-        name: entry
-        for name, entry in (retained_entries or {}).items()
-        if not is_ignored(name, ignore_patterns)
-    }
+    skills: dict[str, dict[str, str]] = {}
     for name in sorted(raw_skills):
         if is_ignored(name, ignore_patterns):
             continue
@@ -106,28 +109,22 @@ def normalized_catalog(
     return {"skills": dict(sorted(skills.items()))}
 
 
-def catalog_text(
-    lock: object,
-    ignore_patterns: tuple[str, ...] = (),
-    retained_entries: dict[str, dict[str, str]] | None = None,
-) -> str:
-    return json.dumps(
-        normalized_catalog(lock, ignore_patterns, retained_entries), indent=2
-    ) + "\n"
-
-
-def normalize(root: pathlib.Path) -> None:
+def normalize(root: pathlib.Path, *, allow_removals: bool = False) -> None:
     catalog = root / "skills-catalog.json"
-    retained_entries: dict[str, dict[str, str]] = {}
-    if catalog.is_file():
-        retained_entries = {
-            name: entry
-            for name, entry in load_catalog(root).items()
-            if entry["sourceType"] == "download"
-        }
-    content = catalog_text(
-        load_json(live_lock_path()), load_ignore_patterns(root), retained_entries
-    )
+    ignore_patterns = load_ignore_patterns(root)
+    existing = load_catalog(root) if catalog.is_file() else {}
+    normalized = normalized_catalog(load_json(live_lock_path()), ignore_patterns)
+    skills = normalized["skills"]
+    if not allow_removals:
+        for name in sorted(existing.keys() - skills.keys()):
+            if is_ignored(name, ignore_patterns):
+                continue
+            print(
+                "would remove catalog skill without --allow-removals: "
+                f"{name}; preserving"
+            )
+            skills[name] = existing[name]
+    content = json.dumps({"skills": dict(sorted(skills.items()))}, indent=2) + "\n"
     if catalog.is_file() and catalog.read_text() == content:
         print("catalog unchanged")
         return
@@ -166,6 +163,8 @@ def load_catalog(root: pathlib.Path) -> dict[str, dict[str, str]]:
         )
         if not valid:
             raise ValueError(f"broken catalog entry: {name}")
+        if entry["source"].startswith("-"):
+            raise ValueError(f"broken catalog entry source starts with '-': {name}")
         skills[name] = entry
     return skills
 
@@ -209,6 +208,17 @@ def check(root: pathlib.Path) -> int:
     return 0
 
 
+def node_version_key(npx: pathlib.Path) -> tuple[int, ...]:
+    match = re.fullmatch(r"v?(\d+(?:\.\d+)*)", npx.parent.parent.name)
+    if not match:
+        return ()
+    return tuple(int(part) for part in match.group(1).split("."))
+
+
+def versioned_npx_candidates(root: pathlib.Path) -> list[pathlib.Path]:
+    return sorted(root.glob("*/bin/npx"), key=node_version_key, reverse=True)
+
+
 def resolve_npx() -> pathlib.Path:
     from_path = shutil.which("npx")
     if from_path:
@@ -219,19 +229,13 @@ def resolve_npx() -> pathlib.Path:
     nvm_bin = os.environ.get("NVM_BIN")
     if nvm_bin:
         candidates.append(pathlib.Path(nvm_bin) / "npx")
-    candidates.extend(
-        sorted((home / ".nvm" / "versions" / "node").glob("*/bin/npx"), reverse=True)
-    )
+    candidates.extend(versioned_npx_candidates(home / ".nvm" / "versions" / "node"))
     mise_data = pathlib.Path(
         os.environ.get("MISE_DATA_DIR", home / ".local/share/mise")
     )
-    candidates.extend(
-        sorted((mise_data / "installs" / "node").glob("*/bin/npx"), reverse=True)
-    )
+    candidates.extend(versioned_npx_candidates(mise_data / "installs" / "node"))
     asdf_data = pathlib.Path(os.environ.get("ASDF_DATA_DIR", home / ".asdf"))
-    candidates.extend(
-        sorted((asdf_data / "installs" / "nodejs").glob("*/bin/npx"), reverse=True)
-    )
+    candidates.extend(versioned_npx_candidates(asdf_data / "installs" / "nodejs"))
     candidates.append(home / ".bun" / "bin" / "npx")
     brew_prefix = os.environ.get("HOMEBREW_PREFIX")
     if brew_prefix:
@@ -274,56 +278,107 @@ def run_command(
     subprocess.run(command, cwd=cwd, env=env, check=True)
 
 
-def install_missing(root: pathlib.Path) -> None:
-    shared = shared_skills_root()
-    shared.mkdir(mode=0o700, parents=True, exist_ok=True)
-    shared.chmod(0o700)
-    catalog = load_catalog(root)
-    npx = resolve_npx()
-    env = command_env(npx)
-    for name, entry in catalog.items():
-        if (shared / name / "SKILL.md").is_file():
-            continue
-        run_command(
-            f"install missing skill: {name} from {entry['source']}",
-            [
-                str(npx),
-                "skills",
-                "add",
-                entry["source"],
-                "--skill",
-                name,
-                "-g",
-                "-y",
-            ],
-            cwd=pathlib.Path.home(),
+def generated_sync_commits(root: pathlib.Path, env: dict[str, str]) -> tuple[str, ...]:
+    status = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain"],
+        cwd=root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout
+    if status:
+        return ()
+    revisions = subprocess.run(
+        ["git", "-C", str(root), "rev-list", "@{u}..HEAD"],
+        cwd=root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.splitlines()
+    if not revisions:
+        return ()
+    subjects: list[str] = []
+    for revision in revisions:
+        subject = subprocess.run(
+            ["git", "-C", str(root), "show", "-s", "--format=%s", revision],
+            cwd=root,
             env=env,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+        changed = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "diff-tree",
+                "--no-commit-id",
+                "--name-only",
+                "-r",
+                revision,
+            ],
+            cwd=root,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.splitlines()
+        if not subject.startswith("chore(skills): sync") or changed != [
+            "skills-catalog.json"
+        ]:
+            return ()
+        subjects.append(subject)
+    return tuple(subjects)
+
+
+def upstream_has_remote_commits(root: pathlib.Path, env: dict[str, str]) -> bool:
+    count = subprocess.run(
+        ["git", "-C", str(root), "rev-list", "--count", "HEAD..@{u}"],
+        cwd=root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
+    return count != "0"
+
+
+def recover_generated_sync_commits(
+    root: pathlib.Path, env: dict[str, str], *, failure: str
+) -> None:
+    if not upstream_has_remote_commits(root, env):
+        raise ValueError(f"{failure} failed without an upstream race; keeping local commits")
+    if not generated_sync_commits(root, env):
+        raise ValueError(
+            f"refusing to discard non-sync local commits after {failure} failure"
         )
-
-
-def run(root: pathlib.Path, *, no_update: bool, no_push: bool) -> int:
-    npx = resolve_npx()
-    env = command_env(npx)
+    run_command(
+        "discard generated sync commits",
+        ["git", "-C", str(root), "reset", "--hard", "@{u}"],
+        cwd=root,
+        env=env,
+    )
     run_command(
         "git pull --ff-only",
         ["git", "-C", str(root), "pull", "--ff-only"],
         cwd=root,
         env=env,
     )
+
+
+def normalize_and_commit(root: pathlib.Path, env: dict[str, str]) -> bool:
     catalog_path = root / "skills-catalog.json"
     original = catalog_path.read_bytes() if catalog_path.is_file() else None
-    update_command = [str(root / "bin" / "skills-update")]
-    if no_update:
-        update_command.append("--no-update")
-    run_command("sync installed skills", update_command, cwd=root, env=env)
     normalize(root)
     if check(root) != 0:
-        return 1
-
+        raise ValueError("catalog validation failed")
     current = catalog_path.read_bytes()
     if original == current:
         print("catalog unchanged; no commit")
-        return 0
+        return False
     run_command(
         "git add skills-catalog.json",
         ["git", "-C", str(root), "add", "skills-catalog.json"],
@@ -337,15 +392,98 @@ def run(root: pathlib.Path, *, no_update: bool, no_push: bool) -> int:
         cwd=root,
         env=env,
     )
+    return True
+
+
+def install_missing(root: pathlib.Path) -> int:
+    shared = shared_skills_root()
+    shared.mkdir(mode=0o700, parents=True, exist_ok=True)
+    shared.chmod(0o700)
+    catalog = load_catalog(root)
+    npx = resolve_npx()
+    env = command_env(npx)
+    failures: list[str] = []
+    for name, entry in catalog.items():
+        if (shared / name / "SKILL.md").is_file():
+            continue
+        try:
+            run_command(
+                f"install missing skill: {name} from {entry['source']}",
+                [
+                    str(npx),
+                    "skills",
+                    "add",
+                    entry["source"],
+                    "--skill",
+                    name,
+                    "-g",
+                    "-y",
+                ],
+                cwd=pathlib.Path.home(),
+                env=env,
+            )
+        except subprocess.CalledProcessError as error:
+            failures.append(name)
+            print(
+                f"failed to install skill: {name} (exit {error.returncode})",
+                file=sys.stderr,
+            )
+    if failures:
+        noun = "skill" if len(failures) == 1 else "skills"
+        print(
+            f"failed to install {len(failures)} {noun}: {', '.join(failures)}",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def run(root: pathlib.Path, *, no_update: bool, no_push: bool) -> int:
+    npx = resolve_npx()
+    env = command_env(npx)
+    try:
+        run_command(
+            "git pull --ff-only",
+            ["git", "-C", str(root), "pull", "--ff-only"],
+            cwd=root,
+            env=env,
+        )
+    except subprocess.CalledProcessError:
+        print("pull found only generated sync commits; recovering", flush=True)
+        recover_generated_sync_commits(root, env, failure="pull")
+    update_command = [str(root / "bin" / "skills-update")]
+    if no_update:
+        update_command.append("--no-update")
+    run_command("sync installed skills", update_command, cwd=root, env=env)
+    if not normalize_and_commit(root, env):
+        return 0
     if no_push:
         print("push skipped: --no-push")
         return 0
-    run_command(
-        "git push",
-        ["git", "-C", str(root), "push"],
-        cwd=root,
-        env=env,
-    )
+    try:
+        run_command(
+            "git push",
+            ["git", "-C", str(root), "push"],
+            cwd=root,
+            env=env,
+        )
+    except subprocess.CalledProcessError:
+        run_command(
+            "git fetch after rejected push",
+            ["git", "-C", str(root), "fetch"],
+            cwd=root,
+            env=env,
+        )
+        print("push rejected; retrying sync once", flush=True)
+        recover_generated_sync_commits(root, env, failure="push")
+        if not normalize_and_commit(root, env):
+            return 0
+        run_command(
+            "git push retry",
+            ["git", "-C", str(root), "push"],
+            cwd=root,
+            env=env,
+        )
     return 0
 
 
@@ -356,6 +494,9 @@ def schedule(root: pathlib.Path) -> None:
         dict.fromkeys((str(npx.parent), "/usr/local/bin", "/usr/bin", "/bin"))
     )
     label = "com.agents-cfg.skills-sync"
+    minute = int.from_bytes(
+        hashlib.sha256(socket.gethostname().encode()).digest()[:8], "big"
+    ) % 60
     print("macOS launchd plist:")
     print(
         "\n".join(
@@ -382,7 +523,7 @@ def schedule(root: pathlib.Path) -> None:
                 "    <key>Hour</key>",
                 "    <integer>9</integer>",
                 "    <key>Minute</key>",
-                "    <integer>0</integer>",
+                f"    <integer>{minute}</integer>",
                 "  </dict>",
                 "</dict>",
                 "</plist>",
@@ -390,13 +531,17 @@ def schedule(root: pathlib.Path) -> None:
         )
     )
     print("Linux crontab:")
-    print(f"0 9 * * * PATH={shlex.quote(schedule_path)} {shlex.quote(str(script))} run")
+    print(
+        f"{minute} 9 * * * PATH={shlex.quote(schedule_path)} "
+        f"{shlex.quote(str(script))} run"
+    )
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("normalize")
+    normalize_parser = subparsers.add_parser("normalize")
+    normalize_parser.add_argument("--allow-removals", action="store_true")
     subparsers.add_parser("check")
     run_parser = subparsers.add_parser("run")
     run_parser.add_argument("--no-update", action="store_true")
@@ -411,7 +556,7 @@ def main(argv: list[str]) -> int:
     args = parse_args(argv)
     try:
         if args.command == "normalize":
-            normalize(repo_root())
+            normalize(repo_root(), allow_removals=args.allow_removals)
             return 0
         if args.command == "check":
             return check(repo_root())
@@ -419,8 +564,7 @@ def main(argv: list[str]) -> int:
             schedule(repo_root())
             return 0
         if args.command == "install-missing":
-            install_missing(repo_root())
-            return 0
+            return install_missing(repo_root())
         if args.command == "resolve-npx":
             print(resolve_npx())
             return 0
