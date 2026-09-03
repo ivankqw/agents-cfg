@@ -131,6 +131,15 @@ readlink <link-path>
 Use `unlink <link-path>` for links that point into `~/agents-cfg`, the private layer, or the pinned
 pstack checkout. Keep regular files and unrelated links.
 
+Check the home lockfile separately:
+
+```bash
+readlink "$HOME/skills-lock.json"
+```
+
+If it points into the repository clone, remove it with `unlink "$HOME/skills-lock.json"`. Keep it
+when it is a regular file or points somewhere else.
+
 Examine `~/.claude/CLAUDE.md` and `~/AGENTS.md`. Remove them if they contain the generated imports or
 header from `install.sh`. The installer does not edit `~/.claude/settings.json` or
 `~/.codex/config.toml`, so remove their merged entries by hand.

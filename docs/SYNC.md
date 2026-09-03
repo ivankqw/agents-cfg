@@ -3,7 +3,7 @@
 I want the same upstream skills on each machine. The current lockfile mixes that intent with local
 state, so two healthy machines can produce different files.
 
-Tim Penkin described the catalog pattern in
+Christopher Penkin described the catalog pattern in
 [One Catalog, Every Machine](https://www.penkin.me/ai/development/tools/dotfiles/2026/07/30/syncing-claude-skills-across-machines.html).
 The design below adapts that pattern to this repository.
 
@@ -17,9 +17,8 @@ choices such as `lastSelectedAgents`. A second machine can install the same sour
 time and produce a different lockfile. A raw file copy creates churn without changing the set of
 skills that the operator wants.
 
-The committed `skills-lock.json` has the same mixed shape. `README.md` and `MAINTAINING.md`
-tell the operator to copy and filter the live file by hand. That process can miss an update
-or retain machine state.
+The committed `skills-lock.json` has the same mixed shape. `MAINTAINING.md` tells the operator to
+copy and filter the live file by hand. That process can miss an update or retain machine state.
 
 ## The planned catalog
 

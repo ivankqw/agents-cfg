@@ -26,7 +26,7 @@ Read the documentation by purpose:
 - [Install](docs/INSTALL.md) installs, verifies, updates, and removes the setup.
 - [Skill sync](docs/SYNC.md) explains lockfile drift and the planned catalog workflow.
 - [Glossary](docs/GLOSSARY.md) defines the shared terms.
-- [Credits](docs/CREDITS.md) names upstream authors, sources, and licences.
+- [Credits](docs/CREDITS.md) names upstream authors, sources, and licenses.
 - [Maintaining](MAINTAINING.md) gives repository editing and verification rules.
 
 The repository uses the MIT License. See [LICENSE](LICENSE). `NOTICE` records adapted material.

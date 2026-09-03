@@ -104,9 +104,9 @@ facts should stay with the job that owns them. The same agent system can carry m
 without carrying a tenant URL or customer name.
 
 The skill boundary lets me consume other people's judgment without claiming it as mine.
-`skills-lock.json` records upstream origins. `pstack-revision.txt` pins the pstack source. Symlinks
-keep those skills connected to their source repositories. I can update them, inspect the change, and
-retain the author's credit.
+`skills-lock.json` records source data for skills installed by the CLI. `pstack-revision.txt` pins
+the pstack port, and `install.sh` links that checkout. I can update those sources, inspect the
+change, and retain the author's credit.
 
 ## Failure stories are training data
 

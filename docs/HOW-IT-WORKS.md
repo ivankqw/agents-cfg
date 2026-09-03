@@ -81,8 +81,9 @@ skills:
 `pstack-revision.txt`. `install.sh` links pstack skills and Codex prompt files from that checkout. The
 repository neither copies pstack nor adds it to `skills-lock.json`.
 
-Symlinks preserve source ownership. An edit to an own skill takes effect through its link. An
-upstream update stays associated with its origin and recorded revision.
+`npx skills` installs ordinary upstream skill folders under `~/.agents/skills`. The installer uses
+symlinks for own skills, pstack, and harness exposure. Each lockfile entry keeps the upstream source
+and revision data.
 
 ## Agents isolate a responsibility
 
