@@ -84,6 +84,21 @@ def replace_description(text: str, description: str) -> str:
     return "---\n" + "".join(updated_lines) + "---\n" + body
 
 
+def validate_skill_name(path: pathlib.Path, expected: str) -> list[str]:
+    if not path.is_file():
+        raise FileNotFoundError(f"missing skill file: {path}")
+    frontmatter, _ = split_frontmatter(path.read_text())
+    names = []
+    for line in frontmatter:
+        match = re.fullmatch(r"name:[ \t]*(\S(?:.*\S)?)[ \t]*\r?\n?", line)
+        if match:
+            names.append(match.group(1))
+    if names != [expected]:
+        actual = ", ".join(names) if names else "missing"
+        raise RuntimeError(f"skill name mismatch in {path}: expected {expected}, found {actual}")
+    return [f"skill name: {expected}"]
+
+
 def skill_file(root: pathlib.Path, name: str) -> pathlib.Path:
     return root / name / "SKILL.md"
 
@@ -217,6 +232,7 @@ def main(argv: list[str]) -> int:
             "apply",
             "check",
             "preflight-pstack",
+            "require-skill-name",
             "unlock",
         ),
     )
@@ -234,6 +250,14 @@ def main(argv: list[str]) -> int:
                 2, "preflight-pstack requires pstack-dir and revision-file"
             )
             emit(validate_pstack_checkout(pstack_dir, revision_file))
+            return 0
+
+        if args.command == "require-skill-name":
+            path, expected = require_paths(
+                2,
+                "require-skill-name requires skill-file and expected-name",
+            )
+            emit(validate_skill_name(path, str(expected)))
             return 0
 
         if args.command == "unlock":

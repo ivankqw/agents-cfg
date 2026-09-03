@@ -58,8 +58,9 @@ set -e
 if [ "$install_rc" -ne 0 ]; then
   exit "$install_rc"
 fi
-if [ ! -f "$HOME/.agents/skills/herdr/SKILL.md" ]; then
-  echo "Herdr restore failed: missing $HOME/.agents/skills/herdr/SKILL.md" >&2
+if ! python3 "$DEST/scripts/skill_metadata.py" require-skill-name \
+  "$HOME/.agents/skills/herdr/SKILL.md" herdr; then
+  echo "Herdr restore failed: invalid $HOME/.agents/skills/herdr/SKILL.md" >&2
   exit 1
 fi
 

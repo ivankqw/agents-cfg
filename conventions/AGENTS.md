@@ -61,6 +61,9 @@ somewhere else, put it in the private layer.
   operator boundaries override simplification advice.
 - Ponytail benchmark figures come from upstream. Do not present them as current-repository
   measurements.
+- Keep a run ledger for work that spans more than one step.
+- Finish the requested batch before you stop.
+- Search for a safe path before you park work on a human action.
 
 ## Roles and configs
 
