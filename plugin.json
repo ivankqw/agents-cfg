@@ -1,0 +1,17 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "impstack",
+  "version": "1.0.0",
+  "description": "impstack, imperfect operator.",
+  "author": {
+    "name": "Ivan Koh"
+  },
+  "homepage": "https://github.com/ivankqw/impstack",
+  "repository": "https://github.com/ivankqw/impstack",
+  "license": "MIT",
+  "keywords": [
+    "agent-plugin",
+    "claude-code",
+    "codex"
+  ]
+}
