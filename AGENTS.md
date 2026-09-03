@@ -9,6 +9,7 @@ If the user asks how it works, read these files:
 - `docs/HOW-IT-WORKS.md`
 - `docs/GLOSSARY.md`
 - `docs/THESIS.md`
+- `docs/SYNC.md`
 
 If the user asks you to change it, read `MAINTAINING.md` and `conventions/AGENTS.md` first. Preserve
 upstream source links. Keep employer, host, person, and credential data in the private layer.

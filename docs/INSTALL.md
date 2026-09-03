@@ -96,17 +96,22 @@ its Codex settings report. Merge any missing setting from
 
 ## Update the setup
 
-Update the portable layer and upstream skills in this order:
+Sync the portable layer and upstream skills, then refresh the generated files and links:
 
 ```bash
 cd ~/agents-cfg
-git pull --ff-only
-./bin/skills-update
+bin/skills-sync run
 ./install.sh
 ```
 
-`bin/skills-update` runs `npx skills update`. It restores this repository's trigger metadata
-and unlock list. The final install refreshes links and regenerates the Codex instruction file.
+`bin/skills-sync run` pulls the repository, restores missing catalogued skills, and updates installed
+upstream skills. It normalizes and validates `skills-catalog.json`, commits a change, and pushes it.
+If a concurrent sync wins the push race, the command rebuilds its generated catalog state and
+retries the push once. The final install refreshes links and regenerates the Codex instruction file.
+
+Use `bin/skills-sync run --no-push` when you want to review the generated commit before you push it.
+See [Keep upstream skills in sync](SYNC.md) for removal safeguards, ignored skills, lockfile
+locations, and schedule generation.
 
 Run both verification checks after an update.
 
@@ -130,15 +135,6 @@ readlink <link-path>
 
 Use `unlink <link-path>` for links that point into `~/agents-cfg`, the private layer, or the pinned
 pstack checkout. Keep regular files and unrelated links.
-
-Check the home lockfile separately:
-
-```bash
-readlink "$HOME/skills-lock.json"
-```
-
-If it points into the repository clone, remove it with `unlink "$HOME/skills-lock.json"`. Keep it
-when it is a regular file or points somewhere else.
 
 Examine `~/.claude/CLAUDE.md` and `~/AGENTS.md`. Remove them if they contain the generated imports or
 header from `install.sh`. The installer does not edit `~/.claude/settings.json` or

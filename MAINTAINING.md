@@ -27,19 +27,22 @@ npx skills add <owner>/<repo>
 ./install.sh                    # Codex discovers it; Claude receives a link and checks metadata
 ```
 
-Then record it, so a fresh machine gets it too. Copy the CLI's global lockfile into this repo and
-read the diff before keeping it:
+Then record it, so a fresh machine gets it too. Normalize the CLI lockfile and read the diff:
 
 ```bash
 cd ~/agents-cfg
-python3 - <<'PY'
-import json, pathlib
-src = json.load(open(pathlib.Path.home() / ".agents/.skill-lock.json"))
-src["skills"] = {k: v for k, v in src["skills"].items() if "larksuite" not in v.get("sourceUrl", "")}
-pathlib.Path("skills-lock.json").write_text(json.dumps(src, indent=2) + "\n")
-PY
-git diff skills-lock.json
+bin/skills-sync normalize
+git diff skills-catalog.json
 ```
+
+Add intentionally untracked skill names to `skills-ignore.txt`. Use one glob per line. The
+normalizer excludes matching lockfile entries, and the checker ignores matching installed folders.
+The larksuite skills stay outside the committed catalog because they are managed separately.
+The normalizer preserves catalog entries that are absent from the current machine. It prints each
+proposed removal. Review those names before you run `bin/skills-sync normalize --allow-removals`.
+
+`install.sh` tries every missing catalog skill. A failed third-party restore prints a warning, but
+the installer continues to link the agent configuration.
 
 If an imported skill must stay explicit-use-only, add or update its description override in
 `scripts/skill_metadata.py`. `install.sh` applies and checks those overrides in `~/.agents/skills`
@@ -115,7 +118,7 @@ printf '%s\n' <full-commit-id> > pstack-revision.txt
 Bootstrap stops when the checkout has local changes. It also stops when the revision is missing.
 Install rejects a checkout at a different revision.
 
-Do not add pstack to `skills-lock.json`. Do not copy pstack skills into this repo. The pinned plugin
+Do not add pstack to `skills-catalog.json`. Do not copy pstack skills into this repo. The pinned plugin
 checkout supplies its skills and prompt stubs.
 
 Update `configs/pstack-codex.md` only with confirmed Codex model slugs. The install appends this file
@@ -140,8 +143,8 @@ to generated Codex instructions because Codex does not support Claude `@imports`
   comparison after it is wrong.
 - **`skillOverrides` matches by name.** When upstream renames a skill, an `off` override stops
   covering it and the skill comes back unannounced.
-- **`npx skills experimental_install` reads `skills-lock.json` from the current directory** and
-  installs into `./.agents/skills`. Run it from `~`. The `-g` flag does not change where it writes.
+- **The skills CLI lockfile contains machine state.** Commit only the stable fields from
+  `bin/skills-sync normalize`.
 - **BSD and GNU differ.** `date -Iseconds`, `readlink -f`, `stat -c` and `sed -i` all behave
   differently on macOS. Prefer plain format strings.
 - **Harness direction is not symmetric.** Claude can call the Codex reviewer plugin. Codex has no

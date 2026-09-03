@@ -104,30 +104,6 @@ def symlink_target(path: pathlib.Path) -> pathlib.Path:
     return target
 
 
-def validate_lock(repo_lock: pathlib.Path, home_lock: pathlib.Path) -> list[str]:
-    if not repo_lock.is_file():
-        raise FileNotFoundError(f"missing repo skills lock: {repo_lock}")
-    desired = repo_lock.resolve(strict=False)
-    if home_lock.is_symlink():
-        current = symlink_target(home_lock).resolve(strict=False)
-        if current != desired:
-            raise RuntimeError(
-                f"refusing to retarget skills lock symlink: {home_lock} -> {os.readlink(home_lock)}"
-            )
-        return [f"skills-lock: already points to {repo_lock}"]
-    if home_lock.exists():
-        raise RuntimeError(f"refusing to replace non-symlink skills lock: {home_lock}")
-    return [f"skills-lock: available at {home_lock}"]
-
-
-def install_lock(repo_lock: pathlib.Path, home_lock: pathlib.Path) -> list[str]:
-    validate_lock(repo_lock, home_lock)
-    if home_lock.is_symlink():
-        home_lock.unlink()
-    home_lock.symlink_to(repo_lock)
-    return [f"skills-lock: linked {home_lock} -> {repo_lock}"]
-
-
 def looks_like_upstream_main_ponytail(path: pathlib.Path) -> bool:
     skill = path / "SKILL.md"
     if not skill.is_file():
@@ -298,35 +274,6 @@ def validate_pstack_checkout(pstack_dir: pathlib.Path, revision_file: pathlib.Pa
     return [f"pstack: checkout preflight ok at {pstack_dir}"]
 
 
-def validate_install_preflight(
-    repo_lock: pathlib.Path,
-    home_lock: pathlib.Path,
-    pstack_dir: pathlib.Path,
-    pstack_revision_file: pathlib.Path,
-    active_root: pathlib.Path,
-    ponytail_source: pathlib.Path,
-    private_root: pathlib.Path,
-) -> list[str]:
-    results = validate_lock(repo_lock, home_lock)
-    results.extend(validate_pstack_checkout(pstack_dir, pstack_revision_file))
-    results.extend(validate_ponytail_preflight(ponytail_source, active_root))
-    results.extend(validate_no_private_ponytail(private_root))
-    return results
-
-
-def validate_operator_state_preflight(
-    repo_lock: pathlib.Path,
-    home_lock: pathlib.Path,
-    active_root: pathlib.Path,
-    ponytail_source: pathlib.Path,
-    private_root: pathlib.Path,
-) -> list[str]:
-    results = validate_lock(repo_lock, home_lock)
-    results.extend(validate_ponytail_preflight(ponytail_source, active_root))
-    results.extend(validate_no_private_ponytail(private_root))
-    return results
-
-
 def install_ponytail(
     source: pathlib.Path, destination: pathlib.Path, disabled_root: pathlib.Path
 ) -> list[str]:
@@ -429,12 +376,9 @@ def main(argv: list[str]) -> int:
         choices=(
             "apply",
             "check",
-            "install-lock",
             "install-ponytail",
             "migrate-ponytail-quarantine",
-            "preflight-install",
-            "preflight-lock",
-            "preflight-operator-state",
+            "preflight-pstack",
             "preflight-ponytail",
             "preflight-private-ponytail",
             "unlock",
@@ -449,74 +393,21 @@ def main(argv: list[str]) -> int:
         return [pathlib.Path(value) for value in args.paths]
 
     try:
-        if args.command == "preflight-lock":
-            repo_lock, home_lock = require_paths(2, "preflight-lock requires repo-lock and home-lock")
-            emit(validate_lock(repo_lock, home_lock))
-            return 0
-
-        if args.command == "install-lock":
-            repo_lock, home_lock = require_paths(2, "install-lock requires repo-lock and home-lock")
-            emit(install_lock(repo_lock, home_lock))
-            return 0
-
         if args.command == "preflight-ponytail":
             source, active_root = require_paths(2, "preflight-ponytail requires source and active-root")
             emit(validate_ponytail_preflight(source, active_root))
             return 0
 
+        if args.command == "preflight-pstack":
+            pstack_dir, revision_file = require_paths(
+                2, "preflight-pstack requires pstack-dir and revision-file"
+            )
+            emit(validate_pstack_checkout(pstack_dir, revision_file))
+            return 0
+
         if args.command == "preflight-private-ponytail":
             (private_root,) = require_paths(1, "preflight-private-ponytail requires private-root")
             emit(validate_no_private_ponytail(private_root))
-            return 0
-
-        if args.command == "preflight-install":
-            (
-                repo_lock,
-                home_lock,
-                pstack_dir,
-                pstack_revision_file,
-                active_root,
-                ponytail_source,
-                private_root,
-            ) = require_paths(
-                7,
-                "preflight-install requires repo-lock, home-lock, pstack-dir, "
-                "revision-file, active-root, ponytail-source, and private-root",
-            )
-            emit(
-                validate_install_preflight(
-                    repo_lock,
-                    home_lock,
-                    pstack_dir,
-                    pstack_revision_file,
-                    active_root,
-                    ponytail_source,
-                    private_root,
-                )
-            )
-            return 0
-
-        if args.command == "preflight-operator-state":
-            (
-                repo_lock,
-                home_lock,
-                active_root,
-                ponytail_source,
-                private_root,
-            ) = require_paths(
-                5,
-                "preflight-operator-state requires repo-lock, home-lock, active-root, "
-                "ponytail-source, and private-root",
-            )
-            emit(
-                validate_operator_state_preflight(
-                    repo_lock,
-                    home_lock,
-                    active_root,
-                    ponytail_source,
-                    private_root,
-                )
-            )
             return 0
 
         if args.command == "install-ponytail":

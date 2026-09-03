@@ -23,11 +23,10 @@ SHARED_SKILLS="$HOME/.agents/skills"
 DISABLED_SKILLS="$HOME/.agents/skills-disabled"
 PSTACK_DIR="${PSTACK_DIR:-$HOME/.local/share/agent-plugins/pstack-claude}"
 BIN="$HOME/.local/bin"
-LOCK="$HOME/skills-lock.json"
 
-python3 "$AC/scripts/skill_metadata.py" preflight-install \
-  "$AC/skills-lock.json" "$LOCK" "$PSTACK_DIR" "$AC/pstack-revision.txt" \
-  "$SHARED_SKILLS" "$AC/skills/ponytail" "$PRIVATE"
+python3 "$AC/scripts/skill_metadata.py" preflight-pstack "$PSTACK_DIR" "$AC/pstack-revision.txt"
+python3 "$AC/scripts/skill_metadata.py" preflight-ponytail "$AC/skills/ponytail" "$SHARED_SKILLS"
+python3 "$AC/scripts/skill_metadata.py" preflight-private-ponytail "$PRIVATE"
 PSTACK_RESOLVED="$(cd "$PSTACK_DIR" && pwd -P)"
 PSTACK_SKILLS="$PSTACK_RESOLVED/plugins/pstack/skills"
 PSTACK_PROMPTS="$PSTACK_RESOLVED/plugins/pstack/.codex-plugin/prompts"
@@ -42,12 +41,9 @@ link() { # link <target> <linkname>
 }
 
 echo "== skills"
-# Third-party skills stay installer-managed in ~/.agents/skills so that
-# `npx skills update` keeps them fresh. We only link them into place — vendoring
-# them would freeze them at one commit and cut them off from upstream.
-# The `skills` CLI reads skills-lock.json from the CURRENT directory and installs
-# into ./.agents/skills — so running it from $HOME targets ~/.agents/skills.
-python3 "$AC/scripts/skill_metadata.py" install-lock "$AC/skills-lock.json" "$LOCK"
+if ! "$AC/bin/skills-sync" install-missing; then
+  echo "  ! some cataloged skills could not be restored; continuing install" >&2
+fi
 python3 "$AC/scripts/skill_metadata.py" migrate-ponytail-quarantine \
   "$SHARED_SKILLS" "$DISABLED_SKILLS"
 python3 "$AC/scripts/skill_metadata.py" install-ponytail \
@@ -280,5 +276,8 @@ if [ -n "$missing" ]; then
   echo "  ! merge $AC/settings/codex.config.template.toml into $CODEX_CONFIG"
   echo "  ! replace HOME_PATH in the template with $HOME"
 fi
+
+echo "== validating third-party skill catalog"
+"$AC/bin/skills-sync" check
 
 echo "== done. Merge the settings templates by hand."

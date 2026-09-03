@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import os
 import pathlib
 import re
@@ -210,6 +211,13 @@ class SkillMetadataTest(unittest.TestCase):
         return pstack
 
     def populate_imported_skills(self, root: pathlib.Path) -> None:
+        catalog = json.loads((ROOT / "skills-catalog.json").read_text())["skills"]
+        for name in catalog:
+            skill_dir = root / name
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            (skill_dir / "SKILL.md").write_text(
+                f"---\nname: {name}\ndescription: Imported test skill.\n---\n"
+            )
         for name, content in FIXTURES.items():
             skill_dir = root / name
             skill_dir.mkdir(parents=True, exist_ok=True)
@@ -257,7 +265,7 @@ class SkillMetadataTest(unittest.TestCase):
         revision = (ROOT / "pstack-revision.txt").read_text().splitlines()[0]
         env = os.environ.copy()
         env["HOME"] = str(home)
-        env["PATH"] = f"{fakebin}{os.pathsep}{env['PATH']}"
+        env["PATH"] = f"{fakebin}{os.pathsep}/usr/bin{os.pathsep}/bin"
         env["PRIVATE_CONFIG"] = str(private or (home.parent / "missing-private"))
         env["PSTACK_DIR"] = str(pstack or (home.parent / "missing-pstack"))
         env["FAKE_PSTACK_REVISION"] = revision
@@ -495,9 +503,9 @@ class SkillMetadataTest(unittest.TestCase):
 
         text = wrapper.read_text()
 
-        self.assertIn("npx skills update", text)
+        self.assertIn('"$NPX" skills update -g', text)
         self.assertLess(text.index('skill_metadata.py" apply'), text.index('skill_metadata.py" check'))
-        self.assertLess(text.index("npx skills update"), text.index("restore_metadata )"))
+        self.assertLess(text.index('"$NPX" skills update -g'), text.index("restore_metadata )"))
 
     def test_update_wrapper_restores_unlocks_after_fake_npx_update(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
@@ -507,10 +515,7 @@ class SkillMetadataTest(unittest.TestCase):
         fakebin = pathlib.Path(tempdir.name) / "bin"
         shared.mkdir(parents=True)
         fakebin.mkdir()
-        for name, content in FIXTURES.items():
-            skill_dir = shared / name
-            skill_dir.mkdir()
-            (skill_dir / "SKILL.md").write_text(content)
+        self.populate_imported_skills(shared)
         skill_metadata.apply_overrides(shared)
 
         npx = fakebin / "npx"
@@ -551,79 +556,10 @@ class SkillMetadataTest(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertEqual((home / "npx.args").read_text(), "skills update\n")
+        self.assertEqual((home / "npx.args").read_text(), "skills update -g\n")
         wayfinder = (shared / "wayfinder" / "SKILL.md").read_text()
         self.assertNotIn("disable-model-invocation: true", wayfinder)
         self.assertIn("name: wayfinder", wayfinder)
-
-    def test_update_wrapper_refuses_regular_home_skills_lock(self) -> None:
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        home = pathlib.Path(tempdir.name) / "home"
-        fakebin = pathlib.Path(tempdir.name) / "bin"
-        home.mkdir()
-        fakebin.mkdir()
-        lock = home / "skills-lock.json"
-        lock.write_text("operator-owned lock\n")
-        npx = fakebin / "npx"
-        npx.write_text(
-            "#!/usr/bin/env bash\n"
-            "printf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n"
-        )
-        npx.chmod(0o755)
-        env = os.environ.copy()
-        env["HOME"] = str(home)
-        env["PATH"] = f"{fakebin}{os.pathsep}{env['PATH']}"
-
-        result = subprocess.run(
-            [str(ROOT / "bin" / "skills-update")],
-            cwd=ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertFalse(lock.is_symlink())
-        self.assertEqual(lock.read_text(), "operator-owned lock\n")
-        self.assertFalse((home / "npx.args").exists())
-
-    def test_update_wrapper_refuses_custom_home_skills_lock_symlink_before_npx(self) -> None:
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        home = pathlib.Path(tempdir.name) / "home"
-        fakebin = pathlib.Path(tempdir.name) / "bin"
-        home.mkdir()
-        fakebin.mkdir()
-        custom_lock = pathlib.Path(tempdir.name) / "operator-lock.json"
-        custom_lock.write_text("operator symlink lock\n")
-        lock = home / "skills-lock.json"
-        lock.symlink_to(custom_lock)
-        npx = fakebin / "npx"
-        npx.write_text(
-            "#!/usr/bin/env bash\n"
-            "printf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n"
-        )
-        npx.chmod(0o755)
-        env = os.environ.copy()
-        env["HOME"] = str(home)
-        env["PATH"] = f"{fakebin}{os.pathsep}{env['PATH']}"
-
-        result = subprocess.run(
-            [str(ROOT / "bin" / "skills-update")],
-            cwd=ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertTrue(lock.is_symlink())
-        self.assertEqual(skill_metadata.symlink_target(lock).resolve(), custom_lock.resolve())
-        self.assertEqual(custom_lock.read_text(), "operator symlink lock\n")
-        self.assertFalse((home / "npx.args").exists())
 
     def test_update_wrapper_restores_metadata_after_failed_npx_and_preserves_npx_rc(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
@@ -648,7 +584,7 @@ class SkillMetadataTest(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 23, result.stderr + result.stdout)
-        self.assertEqual((home / "npx.args").read_text(), "skills update\n")
+        self.assertEqual((home / "npx.args").read_text(), "skills update -g\n")
         ponytail_review = (shared / "ponytail-review" / "SKILL.md").read_text()
         self.assertIn("Use only when the user explicitly names", ponytail_review)
         wayfinder = (shared / "wayfinder" / "SKILL.md").read_text()
@@ -727,7 +663,7 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertFalse((home / "npx.args").exists())
         self.assertTrue(legacy.is_dir())
 
-    def test_bootstrap_refuses_regular_home_skills_lock_before_npx(self) -> None:
+    def test_bootstrap_leaves_regular_home_skills_lock_unchanged(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
         root = pathlib.Path(tempdir.name)
@@ -736,6 +672,9 @@ class SkillMetadataTest(unittest.TestCase):
         home.mkdir()
         fakebin.mkdir()
         (home / "skills-lock.json").write_text("operator lock\n")
+        shared = home / ".agents" / "skills"
+        shared.mkdir(parents=True)
+        self.populate_imported_skills(shared)
         self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
         npx = fakebin / "npx"
         npx.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n")
@@ -753,8 +692,7 @@ class SkillMetadataTest(unittest.TestCase):
             check=False,
         )
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("refusing to replace non-symlink skills lock", result.stderr + result.stdout)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual((home / "skills-lock.json").read_text(), "operator lock\n")
         self.assertFalse((home / "npx.args").exists())
 
@@ -768,7 +706,6 @@ class SkillMetadataTest(unittest.TestCase):
         home.mkdir()
         (checkout / ".git").mkdir(parents=True)
         fakebin.mkdir()
-        shutil.copy(ROOT / "skills-lock.json", checkout / "skills-lock.json")
         git = fakebin / "git"
         git.write_text(
             "#!/usr/bin/env bash\n"
@@ -795,35 +732,13 @@ class SkillMetadataTest(unittest.TestCase):
         )
         self.assertNotIn("skill_metadata.py", result.stderr + result.stdout)
 
-    def test_bootstrap_requires_npx_before_shared_mutation(self) -> None:
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        root = pathlib.Path(tempdir.name)
-        home = root / "home"
-        fakebin = root / "bin"
-        home.mkdir()
-        fakebin.mkdir()
-        (fakebin / "git").symlink_to("/usr/bin/git")
-        (fakebin / "python3").symlink_to("/usr/bin/python3")
-        (fakebin / "uname").symlink_to("/usr/bin/uname")
-        env = os.environ.copy()
-        env["HOME"] = str(home)
-        env["PATH"] = str(fakebin)
+    def test_bootstrap_delegates_npx_resolution_to_skills_sync(self) -> None:
+        text = (ROOT / "bootstrap.sh").read_text()
 
-        result = subprocess.run(
-            ["/bin/bash", str(ROOT / "bootstrap.sh")],
-            cwd=ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
+        self.assertIn('for c in git python3; do', text)
+        self.assertNotIn('for c in git python3 npx; do', text)
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("missing prerequisite: npx", result.stderr + result.stdout)
-        self.assertFalse((home / "git.args").exists())
-
-    def test_bootstrap_refuses_custom_home_skills_lock_symlink_before_shared_mutation(self) -> None:
+    def test_bootstrap_leaves_custom_home_skills_lock_symlink_unchanged(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
         root = pathlib.Path(tempdir.name)
@@ -834,6 +749,9 @@ class SkillMetadataTest(unittest.TestCase):
         custom_lock = root / "custom-lock.json"
         custom_lock.write_text("operator symlink lock\n")
         (home / "skills-lock.json").symlink_to(custom_lock)
+        shared = home / ".agents" / "skills"
+        shared.mkdir(parents=True)
+        self.populate_imported_skills(shared)
         self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
         npx = fakebin / "npx"
         npx.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n")
@@ -851,8 +769,7 @@ class SkillMetadataTest(unittest.TestCase):
             check=False,
         )
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("refusing to retarget skills lock symlink", result.stderr + result.stdout)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual(
             skill_metadata.symlink_target(home / "skills-lock.json").resolve(),
             custom_lock.resolve(),
@@ -862,25 +779,17 @@ class SkillMetadataTest(unittest.TestCase):
             if (home / "git.args").exists()
             else []
         )
-        self.assertFalse(
-            any(
-                re.search(r"(?:^| )(?:pull|fetch|checkout)(?: |$)", command)
-                for command in git_args
-            ),
-            git_args,
-        )
+        self.assertTrue(any(" pull --ff-only" in command for command in git_args), git_args)
         self.assertFalse((home / "npx.args").exists())
 
     def test_bootstrap_uses_shared_install_preflight_before_npx(self) -> None:
         text = (ROOT / "bootstrap.sh").read_text()
 
-        self.assertLess(text.index("preflight_skills_lock"), text.index("pull --ff-only"))
-        self.assertLess(text.index("preflight-install"), text.index("npx --yes"))
+        self.assertLess(text.index("preflight-pstack"), text.index('"$DEST/install.sh"'))
 
     def test_bootstrap_runs_operator_state_preflight_before_pstack_mutation(self) -> None:
         text = (ROOT / "bootstrap.sh").read_text()
 
-        self.assertLess(text.index("preflight_skills_lock"), text.index("pull --ff-only"))
         self.assertIn(
             '  preflight_operator_state\n'
             '  echo "== fetching pinned pstack revision"\n'
@@ -1009,42 +918,13 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertIn("unknown legacy ponytail quarantine", result.stderr + result.stdout)
         self.assertFalse((home / "npx.args").exists())
 
-    def test_bootstrap_restores_metadata_after_failed_npx_and_preserves_npx_rc(self) -> None:
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        root = pathlib.Path(tempdir.name)
-        home = root / "home"
-        shared = home / ".agents" / "skills"
-        fakebin = root / "bin"
-        home.mkdir()
-        shared.mkdir(parents=True)
-        fakebin.mkdir()
-        self.populate_imported_skills(shared)
-        skill_metadata.apply_overrides(shared)
-        pstack = self.create_fake_pstack_checkout(root)
-        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
-        self.write_partial_failure_npx(fakebin, 24)
-        env = self.base_runtime_env(home, fakebin, pstack=pstack)
-        env["AGENTS_CFG_DIR"] = str(ROOT)
+    def test_bootstrap_uses_install_for_catalog_restore(self) -> None:
+        text = (ROOT / "bootstrap.sh").read_text()
 
-        result = subprocess.run(
-            [str(ROOT / "bootstrap.sh")],
-            cwd=ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
+        self.assertIn('"$DEST/install.sh"', text)
+        self.assertNotIn("experimental_install", text)
 
-        self.assertEqual(result.returncode, 24, result.stderr + result.stdout)
-        self.assertEqual((home / "npx.args").read_text(), "--yes skills@latest experimental_install\n")
-        ponytail_review = (shared / "ponytail-review" / "SKILL.md").read_text()
-        self.assertIn("Use only when the user explicitly names", ponytail_review)
-        wayfinder = (shared / "wayfinder" / "SKILL.md").read_text()
-        self.assertNotIn("disable-model-invocation: true", wayfinder)
-        self.assertEqual((shared / "ponytail").resolve(), (ROOT / "skills" / "ponytail").resolve())
-
-    def test_install_refuses_regular_home_skills_lock_before_any_shared_state(self) -> None:
+    def test_install_leaves_regular_home_skills_lock_unchanged(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
         root = pathlib.Path(tempdir.name)
@@ -1053,7 +933,15 @@ class SkillMetadataTest(unittest.TestCase):
         home.mkdir()
         fakebin.mkdir()
         (home / "skills-lock.json").write_text("operator lock\n")
-        env = self.base_runtime_env(home, fakebin)
+        shared = home / ".agents" / "skills"
+        shared.mkdir(parents=True)
+        self.populate_imported_skills(shared)
+        pstack = self.create_fake_pstack_checkout(root)
+        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
+        npx = fakebin / "npx"
+        npx.write_text("#!/usr/bin/env bash\nexit 0\n")
+        npx.chmod(0o755)
+        env = self.base_runtime_env(home, fakebin, pstack=pstack)
 
         result = subprocess.run(
             [str(ROOT / "install.sh")],
@@ -1064,12 +952,10 @@ class SkillMetadataTest(unittest.TestCase):
             check=False,
         )
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("refusing to replace non-symlink skills lock", result.stderr + result.stdout)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual((home / "skills-lock.json").read_text(), "operator lock\n")
-        self.assertFalse((home / ".agents").exists())
 
-    def test_install_refuses_custom_home_skills_lock_symlink_before_any_shared_state(self) -> None:
+    def test_install_leaves_custom_home_skills_lock_symlink_unchanged(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
         root = pathlib.Path(tempdir.name)
@@ -1080,7 +966,15 @@ class SkillMetadataTest(unittest.TestCase):
         custom_lock = root / "custom-lock.json"
         custom_lock.write_text("operator symlink lock\n")
         (home / "skills-lock.json").symlink_to(custom_lock)
-        env = self.base_runtime_env(home, fakebin)
+        shared = home / ".agents" / "skills"
+        shared.mkdir(parents=True)
+        self.populate_imported_skills(shared)
+        pstack = self.create_fake_pstack_checkout(root)
+        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
+        npx = fakebin / "npx"
+        npx.write_text("#!/usr/bin/env bash\nexit 0\n")
+        npx.chmod(0o755)
+        env = self.base_runtime_env(home, fakebin, pstack=pstack)
 
         result = subprocess.run(
             [str(ROOT / "install.sh")],
@@ -1091,13 +985,11 @@ class SkillMetadataTest(unittest.TestCase):
             check=False,
         )
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("refusing to retarget skills lock symlink", result.stderr + result.stdout)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual(
             skill_metadata.symlink_target(home / "skills-lock.json").resolve(),
             custom_lock.resolve(),
         )
-        self.assertFalse((home / ".agents").exists())
 
     def test_install_refuses_missing_pstack_before_skill_links(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
@@ -1168,6 +1060,9 @@ class SkillMetadataTest(unittest.TestCase):
         self.populate_imported_skills(shared)
         pstack = self.create_fake_pstack_checkout(root)
         self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
+        npx = fakebin / "npx"
+        npx.write_text("#!/usr/bin/env bash\nexit 0\n")
+        npx.chmod(0o755)
         env = self.base_runtime_env(home, fakebin, pstack=pstack)
 
         result = subprocess.run(
@@ -1180,7 +1075,7 @@ class SkillMetadataTest(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertEqual((home / "skills-lock.json").resolve(), (ROOT / "skills-lock.json").resolve())
+        self.assertFalse((home / "skills-lock.json").exists())
         self.assertEqual((shared / "ponytail").resolve(), (ROOT / "skills" / "ponytail").resolve())
         self.assertFalse((shared / "ponytail.upstream-disabled").exists())
 
