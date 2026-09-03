@@ -190,7 +190,10 @@ def resolve_npx() -> pathlib.Path:
     brew_prefix = os.environ.get("HOMEBREW_PREFIX")
     if brew_prefix:
         candidates.append(pathlib.Path(brew_prefix) / "bin" / "npx")
-    elif platform.system() == "Darwin":
+    candidates.append(home / ".linuxbrew" / "bin" / "npx")
+    if platform.system() == "Linux":
+        candidates.append(pathlib.Path("/home/linuxbrew/.linuxbrew/bin/npx"))
+    elif not brew_prefix:
         candidates.extend(
             (pathlib.Path("/opt/homebrew/bin/npx"), pathlib.Path("/usr/local/bin/npx"))
         )

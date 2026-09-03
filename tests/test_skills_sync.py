@@ -326,6 +326,17 @@ class SkillsSyncTests(unittest.TestCase):
             if index == 1:
                 overrides.pop("NVM_BIN")
 
+        linuxbrew = home / ".linuxbrew" / "bin" / "npx"
+        linuxbrew.parent.mkdir(parents=True)
+        linuxbrew.write_text("#!/bin/sh\n")
+        linuxbrew.chmod(0o755)
+        result = self.run_cli(repo, home, "schedule", path=str(path_bin))
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        cron = result.stdout.splitlines()[-1]
+        scheduled_path = shlex.split(cron)[5].removeprefix("PATH=")
+        self.assertEqual(scheduled_path.split(os.pathsep)[0], str(linuxbrew.parent))
+
 
 if __name__ == "__main__":
     unittest.main()
