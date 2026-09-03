@@ -163,6 +163,10 @@ these as passes; the rules matter on their own.
 - PR body sections: copy the repo's PR template headings exactly; CI can gate on the text. With no
   template: Description, User-facing or operational impact, What changed, Validation.
 - Write a markdown-heavy PR body to a temp file so the backticks survive the shell, then delete it.
+- Stacked PRs: when the base PR merges, its head branch is deleted in the same step (or the repo
+  auto-deletes head branches), so GitHub retargets the stack to the default branch. A stack whose
+  base branch outlives its merge collects merges that never reach main: PR 16 merged into an
+  already-merged branch that way.
 
 ### Releases
 
