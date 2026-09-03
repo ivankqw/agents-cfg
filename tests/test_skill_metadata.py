@@ -19,6 +19,20 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import skill_metadata
 
 
+TEST_SYSTEM_PATH = os.pathsep.join(("/usr/bin", "/bin"))
+
+
+def hermetic_test_path(fakebin: pathlib.Path) -> str:
+    path = os.pathsep.join((str(fakebin), TEST_SYSTEM_PATH))
+    for command in ("claude", "codex"):
+        resolved = shutil.which(command, path=path)
+        if resolved is None:
+            continue
+        if not pathlib.Path(resolved).resolve().is_relative_to(fakebin.resolve()):
+            raise RuntimeError(f"test PATH resolves real {command}: {resolved}")
+    return path
+
+
 FIXTURES = {
     "cyclomatic-complexity": textwrap.dedent(
         """\
@@ -218,6 +232,39 @@ class SkillMetadataTest(unittest.TestCase):
         )
         npx.chmod(0o755)
 
+    def write_herdr_restore_npx(self, fakebin: pathlib.Path) -> None:
+        npx = fakebin / "npx"
+        npx.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "printf '%s\\n' \"$*\" > \"$HOME/npx.args\"\n"
+            "case \"$FAKE_HERDR_STATE\" in\n"
+            "  valid)\n"
+            "    mkdir -p \"$HOME/.agents/skills/herdr\"\n"
+            "    printf '%s\\n' '---' 'name: herdr' 'description: Herdr.' '---' "
+            "> \"$HOME/.agents/skills/herdr/SKILL.md\"\n"
+            "    ;;\n"
+            "  missing) ;;\n"
+            "  decoy)\n"
+            "    mkdir -p \"$HOME/.agents/skills/herdr\"\n"
+            "    printf '%s\\n' '---' 'name: not-herdr' 'description: Decoy.' '---' "
+            "> \"$HOME/decoy-skill.md\"\n"
+            "    ln -s \"$HOME/decoy-skill.md\" \"$HOME/.agents/skills/herdr/SKILL.md\"\n"
+            "    ;;\n"
+            "  *) exit 98 ;;\n"
+            "esac\n"
+        )
+        npx.chmod(0o755)
+
+    def write_fake_mcp_clis(self, fakebin: pathlib.Path) -> None:
+        for name in ("claude", "codex"):
+            executable = fakebin / name
+            executable.write_text(
+                "#!/usr/bin/env bash\n"
+                f"printf '%s\\n' \"$*\" >> \"$HOME/{name}-mcp.args\"\n"
+            )
+            executable.chmod(0o755)
+
     def base_runtime_env(
         self,
         home: pathlib.Path,
@@ -228,7 +275,7 @@ class SkillMetadataTest(unittest.TestCase):
         revision = (ROOT / "pstack-revision.txt").read_text().splitlines()[0]
         env = os.environ.copy()
         env["HOME"] = str(home)
-        env["PATH"] = f"{fakebin}{os.pathsep}/usr/bin{os.pathsep}/bin"
+        env["PATH"] = hermetic_test_path(fakebin)
         env["PRIVATE_CONFIG"] = str(private or (home.parent / "missing-private"))
         env["PSTACK_DIR"] = str(pstack or (home.parent / "missing-pstack"))
         env["FAKE_PSTACK_REVISION"] = revision
@@ -408,7 +455,7 @@ class SkillMetadataTest(unittest.TestCase):
 
         env = os.environ.copy()
         env["HOME"] = str(home)
-        env["PATH"] = f"{fakebin}{os.pathsep}{env['PATH']}"
+        env["PATH"] = hermetic_test_path(fakebin)
 
         result = subprocess.run(
             [str(ROOT / "bin" / "skills-update")],
@@ -579,10 +626,62 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertLess(text.index("preflight-pstack"), text.index('"$DEST/install.sh"'))
 
     def test_bootstrap_requires_restored_herdr_skill(self) -> None:
-        text = (ROOT / "bootstrap.sh").read_text()
+        for state, expected_rc in (("valid", 0), ("missing", 1), ("decoy", 1)):
+            with self.subTest(state=state), tempfile.TemporaryDirectory() as temp:
+                root = pathlib.Path(temp)
+                home = root / "home"
+                shared = home / ".agents" / "skills"
+                fakebin = root / "bin"
+                shared.mkdir(parents=True)
+                fakebin.mkdir()
+                self.populate_imported_skills(shared)
+                skill_metadata.apply_overrides(shared)
+                shutil.rmtree(shared / "herdr")
+                pstack = self.create_fake_pstack_checkout(root)
+                self.write_fake_git(
+                    fakebin,
+                    (ROOT / "pstack-revision.txt").read_text().splitlines()[0],
+                )
+                self.write_herdr_restore_npx(fakebin)
+                self.write_fake_mcp_clis(fakebin)
+                env = self.base_runtime_env(home, fakebin, pstack=pstack)
+                env["AGENTS_CFG_DIR"] = str(ROOT)
+                env["FAKE_HERDR_STATE"] = state
+                env["CONTEXT7_API_KEY"] = "test-token"
+                env["EXECUTOR_MCP_URL"] = "https://executor.example/mcp"
 
-        self.assertIn("Herdr restore failed", text)
-        self.assertLess(text.index('"$DEST/install.sh"'), text.index("Herdr restore failed"))
+                result = subprocess.run(
+                    [str(ROOT / "bootstrap.sh")],
+                    cwd=ROOT,
+                    env=env,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+
+                output = result.stderr + result.stdout
+                self.assertEqual(
+                    (home / "claude-mcp.args").read_text(),
+                    "mcp add --scope user --transport http context7 https://mcp.context7.com/mcp "
+                    "--header CONTEXT7_API_KEY: test-token\n"
+                    "mcp add --scope user --transport http exa https://mcp.exa.ai/mcp\n"
+                    "mcp add --scope user --transport http linear-server https://mcp.linear.app/mcp\n"
+                    "mcp add --scope user --transport http executor https://executor.example/mcp\n",
+                )
+                self.assertEqual(
+                    (home / "codex-mcp.args").read_text(),
+                    "mcp add exa --url https://mcp.exa.ai/mcp\n"
+                    "mcp add linear-server --url https://mcp.linear.app/mcp\n"
+                    "mcp add executor --url https://executor.example/mcp\n",
+                )
+                self.assertEqual(result.returncode, expected_rc, output)
+                if state == "missing":
+                    self.assertIn("missing catalog skill: herdr", output)
+                elif expected_rc:
+                    self.assertIn("Herdr restore failed", output)
+                else:
+                    self.assertIn("== done", output)
+
         catalog = json.loads((ROOT / "skills-catalog.json").read_text())
         self.assertEqual(catalog["skills"]["herdr"]["source"], "herdrdev/herdr")
 
@@ -698,13 +797,7 @@ class SkillMetadataTest(unittest.TestCase):
         npx = fakebin / "npx"
         npx.write_text("#!/usr/bin/env bash\nexit 0\n")
         npx.chmod(0o755)
-        for name in ("claude", "codex"):
-            executable = fakebin / name
-            executable.write_text(
-                "#!/usr/bin/env bash\n"
-                f"printf '%s\\n' \"$*\" >> \"$HOME/{name}-mcp.args\"\n"
-            )
-            executable.chmod(0o755)
+        self.write_fake_mcp_clis(fakebin)
         env = self.base_runtime_env(home, fakebin, pstack=pstack)
         env["CONTEXT7_API_KEY"] = "test-token"
         env["EXECUTOR_MCP_URL"] = "https://executor.example/mcp"
