@@ -66,7 +66,7 @@ class SkillsSyncTests(unittest.TestCase):
     ) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
         env["HOME"] = str(home)
-        env["AGENTS_CFG_DIR"] = str(repo)
+        env["IMPSTACK_DIR"] = str(repo)
         env["SHARED_SKILLS"] = str(home / ".agents" / "skills")
         env.pop("XDG_STATE_HOME", None)
         if path is not None:

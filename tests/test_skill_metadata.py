@@ -519,7 +519,7 @@ class SkillMetadataTest(unittest.TestCase):
         npx.chmod(0o755)
         pstack = self.create_fake_pstack_checkout(root)
         env = self.base_runtime_env(home, fakebin, pstack=pstack, private=root / "private")
-        env["AGENTS_CFG_DIR"] = str(ROOT)
+        env["IMPSTACK_DIR"] = str(ROOT)
 
         result = subprocess.run(
             [str(ROOT / "bootstrap.sh")],
@@ -539,7 +539,7 @@ class SkillMetadataTest(unittest.TestCase):
         self.addCleanup(tempdir.cleanup)
         root = pathlib.Path(tempdir.name)
         home = root / "home"
-        checkout = root / "agents-cfg"
+        checkout = root / "impstack"
         fakebin = root / "bin"
         home.mkdir()
         (checkout / ".git").mkdir(parents=True)
@@ -552,7 +552,7 @@ class SkillMetadataTest(unittest.TestCase):
         )
         git.chmod(0o755)
         env = self.base_runtime_env(home, fakebin)
-        env["AGENTS_CFG_DIR"] = str(checkout)
+        env["IMPSTACK_DIR"] = str(checkout)
 
         result = subprocess.run(
             [str(ROOT / "bootstrap.sh")],
@@ -596,7 +596,7 @@ class SkillMetadataTest(unittest.TestCase):
         npx.chmod(0o755)
         pstack = self.create_fake_pstack_checkout(root)
         env = self.base_runtime_env(home, fakebin, pstack=pstack, private=root / "private")
-        env["AGENTS_CFG_DIR"] = str(ROOT)
+        env["IMPSTACK_DIR"] = str(ROOT)
 
         result = subprocess.run(
             [str(ROOT / "bootstrap.sh")],
@@ -645,7 +645,7 @@ class SkillMetadataTest(unittest.TestCase):
                 self.write_herdr_restore_npx(fakebin)
                 self.write_fake_mcp_clis(fakebin)
                 env = self.base_runtime_env(home, fakebin, pstack=pstack)
-                env["AGENTS_CFG_DIR"] = str(ROOT)
+                env["IMPSTACK_DIR"] = str(ROOT)
                 env["FAKE_HERDR_STATE"] = state
                 env["CONTEXT7_API_KEY"] = "test-token"
                 env["EXECUTOR_MCP_URL"] = "https://executor.example/mcp"

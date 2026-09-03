@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
 # One-command bootstrap from a bare machine (Linux or macOS).
-#   curl -fsSL https://raw.githubusercontent.com/ivankqw/agents-cfg/main/bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/ivankqw/impstack/main/bootstrap.sh | bash
 set -euo pipefail
 
-DEST="${AGENTS_CFG_DIR:-$HOME/agents-cfg}"
-REPO="${AGENTS_CFG_REPO:-https://github.com/ivankqw/agents-cfg.git}"
+DEST="${IMPSTACK_DIR:-$HOME/impstack}"
+REPO="${IMPSTACK_REPO:-https://github.com/ivankqw/impstack.git}"
 PSTACK_DIR="${PSTACK_DIR:-$HOME/.local/share/agent-plugins/pstack-claude}"
 PSTACK_REPO="${PSTACK_REPO:-https://github.com/michael-denyer/pstack-claude.git}"
 PRIVATE="${PRIVATE_CONFIG:-$HOME/agents-cfg-private}"
+
+legacy_basename="agents""-cfg"
+legacy_dir="$HOME/$legacy_basename"
+new_dir="$HOME/impstack"
+if [ -e "$legacy_dir" ] && [ ! -e "$new_dir" ] && [ ! -L "$new_dir" ]; then
+  ln -s "$legacy_dir" "$new_dir"
+  echo "== linked legacy checkout: $new_dir -> $legacy_dir"
+fi
 
 case "$(uname -s)" in Linux|Darwin) ;; *) echo "unsupported OS: $(uname -s)" >&2; exit 1;; esac
 for c in git python3; do command -v "$c" >/dev/null || { echo "missing prerequisite: $c" >&2; exit 1; }; done

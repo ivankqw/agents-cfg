@@ -30,7 +30,7 @@ npx skills add <owner>/<repo>
 Then record it, so a fresh machine gets it too. Normalize the CLI lockfile and read the diff:
 
 ```bash
-cd ~/agents-cfg
+cd ~/impstack
 bin/skills-sync normalize
 git diff skills-catalog.json
 ```
