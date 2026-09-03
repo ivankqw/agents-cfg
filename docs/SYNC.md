@@ -1,78 +1,95 @@
 # Keep upstream skills in sync
 
-I want the same upstream skills on each machine. The current lockfile mixes that intent with local
-state, so two healthy machines can produce different files.
+Use `bin/skills-sync` to keep the same upstream skills on each machine. The skills CLI lockfile
+mixes that intent with local state, so two healthy machines can produce different lockfiles.
 
 Christopher Penkin described the catalog pattern in
 [One Catalog, Every Machine](https://www.penkin.me/ai/development/tools/dotfiles/2026/07/30/syncing-claude-skills-across-machines.html).
-The design below adapts that pattern to this repository.
+This repository adapts that pattern.
 
 ## Why the lockfile drifts
 
-The `skills` CLI writes its live lockfile at `~/.agents/.skill-lock.json`. The file records the
-source fields needed to restore a skill. It records machine state.
+The skills CLI normally writes its live lockfile to `~/.agents/.skill-lock.json`. The file records
+both the source fields needed to restore a skill and machine state.
 
 The machine state includes installation timestamps, update timestamps, skill-folder hashes, and UI
-choices such as `lastSelectedAgents`. A second machine can install the same source catalog at another
-time and produce a different lockfile. A raw file copy creates churn without changing the set of
-skills that the operator wants.
+choices such as `lastSelectedAgents`. Another machine can install the same sources at another time
+and produce a different lockfile. A raw file copy creates churn without changing the requested set.
 
-The committed `skills-lock.json` has the same mixed shape. `MAINTAINING.md` tells the operator to
-copy and filter the live file by hand. That process can miss an update or retain machine state.
+If `XDG_STATE_HOME` is set, `bin/skills-sync` reads
+`$XDG_STATE_HOME/skills/.skill-lock.json`. `SKILLS_LOCK_FILE` overrides both locations. Without either
+variable, the command falls back to `~/skills-lock.json` when the normal lockfile does not exist.
 
-## The planned catalog
+## Catalog contents
 
-The sibling implementation lane plans to turn the committed file into a normalized catalog. Each
-skill entry will keep these fields:
+The committed `skills-catalog.json` keeps these fields for each upstream skill:
 
 - `source`
 - `sourceType`
 - `sourceUrl`
 - `skillPath`
 
-The catalog will omit timestamps, UI state, and per-machine hashes. It will describe the requested
-upstream skills rather than one machine's installation history.
+The catalog omits timestamps, UI state, and per-machine hashes. It describes the requested upstream
+skills instead of one machine's installation history.
 
-## The planned sync command
+Add intentionally untracked skill names to `skills-ignore.txt`. Use one glob per line. The
+normalizer excludes matching live entries, and the checker ignores matching installed folders.
 
-The sibling lane plans to add `bin/skills-sync`. This branch documents the contract and does not
-provide the command.
+## Normalize the catalog
 
-The planned command will run these steps in order:
-
-1. Pull the portable-layer repository.
-2. Install catalogued skills that the machine lacks.
-3. Update the installed upstream skills.
-4. Normalize the live lockfile into the committed catalog fields.
-5. Validate that each catalogued skill folder exists under `~/.agents/skills`.
-6. Commit catalog changes with the hostname when the normalized catalog changed.
-
-The command must stop when a catalogued folder is missing after installation. A missing folder means
-the catalog cannot restore the declared setup.
-
-The commit hostname will identify the machine that observed the upstream change. The catalog content
-will remain portable because it excludes host paths and local state.
-
-## The planned schedule
-
-The sibling lane plans to supply a job that runs once a day. macOS will use a `launchd` entry. Linux
-will use a `cron` entry.
-
-The scheduled job will call `bin/skills-sync` from the repository clone. It will create a commit
-when normalized catalog content changes. Operators can review and push that commit through the
-usual Git workflow.
-
-## Use the current update path
-
-Until `bin/skills-sync` lands, use the existing commands:
+Run the normalizer after you add or update an upstream skill:
 
 ```bash
 cd ~/agents-cfg
-git pull --ff-only
-./bin/skills-update
-./install.sh
+bin/skills-sync normalize
+git diff skills-catalog.json
 ```
 
-To keep a live lockfile change before `bin/skills-sync` lands, follow the copy-and-filter recipe in
-`MAINTAINING.md`. Read the diff before you commit it. The planned command will replace that manual
-normalization step.
+The normalizer preserves a catalog entry when the current machine lacks that skill. It prints the
+name instead of silently removing it. Review the proposed removals, then allow them explicitly:
+
+```bash
+bin/skills-sync normalize --allow-removals
+```
+
+Run `bin/skills-sync check` to validate the catalog. The check requires every catalogued folder to
+exist under `~/.agents/skills` with a `SKILL.md`. It also reports installed, unignored skill folders
+that the catalog does not contain.
+
+## Run the full sync
+
+Run the full workflow with one command:
+
+```bash
+cd ~/agents-cfg
+bin/skills-sync run
+```
+
+The command runs these steps in order:
+
+1. Pull the repository with `git pull --ff-only`.
+2. Restore missing catalogued skills and update installed upstream skills.
+3. Restore this repository's trigger metadata and unlock list.
+4. Normalize and validate `skills-catalog.json`.
+5. Commit a changed catalog as `chore(skills): sync from <hostname>`.
+6. Push the commit.
+
+Use `--no-update` to restore and normalize without updating upstream skills. Use `--no-push` to keep
+a generated commit local for review.
+
+If another machine wins the push race, the command fetches the new upstream state. It discards only
+local commits generated by `skills-sync`, pulls, normalizes again, and retries the push once. It
+keeps a local commit when the failure is not an upstream race or when the commit contains other
+changes.
+
+## Schedule the sync
+
+Print a macOS `launchd` property list and a Linux `cron` line:
+
+```bash
+bin/skills-sync schedule
+```
+
+Both definitions run daily during the 09:00 hour. The command derives the minute from the hostname,
+so machines do not all contact the upstream services at the same minute. The generated definitions
+include the resolved `npx` directory in `PATH`.
