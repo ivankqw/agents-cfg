@@ -48,6 +48,17 @@ cross-vendor review lane, start it from Claude Code and select `default` or `dee
 
 Cost rises strictly down that list.
 
+## Roles follow proven capability
+
+Assign a vendor to a role by what its sandbox can do today, and re-probe when a blocker is fixed. Codex
+was review-only while its sandbox could not write to a worktree's git; once that was fixed, one probe
+made it a full implementer again. A permanent workaround for a fixed blocker is a config lie.
+
+Implementation lanes run as Codex agents in terminal panes, not as Claude subagents, so their spend
+and their weights stay separate from the orchestrator. When a Claude subagent is unavoidable, it runs
+on Sonnet, never Opus. A stated rule with no mechanism does not hold: an Opus implementer ran the same
+day the rule was stated. The table above still names Sonnet as implementer and is due a revision.
+
 ## Price, so nobody guesses again
 
 Per million tokens, input / output, from the Anthropic pricing page (checked 2026-08-21):
