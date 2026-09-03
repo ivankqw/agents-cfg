@@ -57,4 +57,3 @@ holds the portable layer.
 
 **Private layer.** The employer, host, person, and domain details that must stay outside the portable
 layer. `install.sh` reads this layer from `~/agents-cfg-private` or `$PRIVATE_CONFIG`.
-
