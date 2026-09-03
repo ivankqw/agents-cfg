@@ -67,6 +67,12 @@ disagree, a state was missed and every later pass is unsound.
 **Say in the report which states and categories you swept, and which you did not.** A sweep that
 names its own boundary can be corrected. One that implies completeness cannot.
 
+**Address by id, search by meaning, read back every write.** Pass project and team UUIDs, never
+names: a save once returned success and set no project because the name carried an escaped
+ampersand, and two assignments were silently lost. The tracker's `query` is semantic, not substring,
+so "DO NOT RUN" returns fifty loose matches; enumerate and filter locally instead. After each write,
+fetch the issue and confirm the field changed before counting it as done.
+
 **Read in two steps: list to enumerate, get to judge.** Tracker list calls truncate issue bodies
 (often to a few hundred characters), so a sweep built on list output alone is exhaustive only over
 each issue's opening — a `DO NOT RUN` buried mid-body slips through. Every candidate a pass acts on
@@ -164,6 +170,13 @@ overlaps. **Do not merge them.** Which of two framings survives is a decision, n
   was populated on every one of ~1,500 rows. Cancelling it on the ticket's own account would have
   been the right call for entirely the wrong reason, and measuring turned up two further corrections
   on the map above it that nobody was looking for.
+- **Measure claims, not settled measurements.** The rule above is about a ticket's assertions. Before
+  re-measuring a live system, search closed tickets and commits for the investigation that already
+  did: four errors in one day came from re-deriving a fact a resolved ticket had measured and fixed.
+- **"Shipped" is checked against the merge target, not the push.** A guard reported as shipped, and
+  cited for days as the reason a blocker was only a dependency, existed on a branch and never reached
+  the PR or the default branch. A ticket sat Done with four of its six items unshipped. Re-check any
+  claim a later decision rests on.
 - **Cancelled and Done are different claims.** Done asserts the work happened. Use Cancelled when the
   reason for the work evaporated. Marking an abandoned ticket Done corrupts every later reading of
   what shipped.

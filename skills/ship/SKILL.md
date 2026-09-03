@@ -61,6 +61,13 @@ agents' context on the searching and the typing.
   ("waiting for the suite") burns the whole dispatch: one delegate spent 3,000 seconds across three
   turns saying it was waiting. Verify every ticket or issue id the delegate cites before pushing its
   commits; delegates invent plausible ids.
+- **A background lane does not finish on its own.** The brief says "poll your own task to
+  completion" before it says anything else, because every owner that handed work to a background task
+  idled instead of polling. Before you call the unit done, diff the delegate's final report against
+  `git log` on the branch: one fourth commit landed only locally and the PR merged without it.
+- **One full suite per machine, and the brief names who owns it.** Two overlapping runs turned a
+  6-minute baseline into 22 minutes and made both results unusable. Kill a runaway by PID and confirm
+  with `ps`; `pkill` on the wrapper left the real `pytest` alive as a zombie.
 
 ## The flow
 
@@ -116,6 +123,11 @@ For any UI work, invoke `impeccable` first, then `improve-react` for the React-l
 not look at. Run both on each pass rather than once at the end. If the project ships its own UI
 skill, invoke that too: it carries the design system, the house rules, and the verification loop.
 
+A check gated on the condition it exists to detect is not a check. Monitors, CI guards and alerts run
+unconditionally and report "not applicable" rather than skip: two dead allowlist ids sat unreported
+for a week inside the tool written to find them, because the check ran only while the allowlist was
+in use.
+
 **Done when** every function in the diff has a real implementation, no TODO or stub markers remain,
 and every new code path is exercised by at least one test.
 
@@ -127,7 +139,7 @@ Run the cheapest check that exercises the change. Paste the real command and its
 tightened is listed, and each changed interface has its downstream callers named, including callers
 outside the repo.
 
-Three traps make a pasted "real output" fake, each hit in production sessions:
+Six traps make a pasted "real output" fake, each hit in production sessions:
 
 - Capture status to a file (`cmd > log 2>&1; echo $? > exit.txt`) and read the file. A status read
   any other way reports the wrong process.
@@ -136,6 +148,26 @@ Three traps make a pasted "real output" fake, each hit in production sessions:
 - An unblock is proven by exercising the blocked path against what it actually consumes. Re-reading
   the contract you already trusted retires nothing: "last blocker" was claimed three times off the
   same re-diff before running the consumer exposed four more gaps.
+- Proof that a suite ran is its test-count line, never its status. A fresh worktree has no `.venv`,
+  so `.venv/bin/python -m pytest` returned `exit=0` with no tests run. Run the project's bootstrap
+  target, not an interpreter path, and confirm the tree you are reading results from is the tree you
+  changed.
+- An aggregate taken from a list endpoint measures the serializer, not the data. "0 of 45" was a key
+  the list payload never carried. Re-derive any count from the detail endpoint or the database.
+- Run the suite once with `HOME` pointed at an empty directory. An entrypoint called without its
+  `--env-file` fell back to a file in the developer's home, so three tests passed locally and failed
+  in CI for a reason the diff never showed.
+
+Three more rules for the suite itself:
+
+- After a rebase onto a moved default branch, re-derive every measured count. Breakage arrives
+  semantically, as a test asserting a label another merged PR changed, not as a git conflict.
+- When a suite is slow, profile the fixture before cutting tests. An autouse file-backed SQLite
+  `create_all`/`drop_all` cost 1.3 s per test; in-memory with `StaticPool` cut the run from 22 to 4
+  minutes and deleted nothing.
+- Write down what the local substrate cannot detect and keep it with the suite. SQLite hid three
+  Postgres-only faults (an `ORDER BY` with no tiebreaker, second-precision timestamp ties, a
+  constraint reported under a different name) that would each have returned 500 in production.
 
 ## 5. Dogfood it, before it becomes a PR
 
@@ -195,6 +227,9 @@ explicitly what you left out and why.
   obviously right. Ask the one question; do not survey the options.
 - **A review finding implies a design change rather than a patch.** Surface the finding, keep
   shipping the rest of the branch.
+- **A step needs a secret.** Never accept it through the conversation, and the `!` bash prefix is
+  still the conversation. Hand back a `read -s` recipe that writes a mode-600 file the lane sources,
+  and continue once the file exists.
 
 These are not reasons to stop:
 

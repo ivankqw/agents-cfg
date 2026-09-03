@@ -11,23 +11,25 @@ somewhere else, put it in the private layer.
   critique. Numbers you act on, you re-derive.
 - Tag every number in a claim: `[measured: <command> -> <output>]`, `[sourced: <doc>]`, `[estimate]`,
   or `[unverified]`. A virtue cannot be graded. A tag can be checked.
+- Tags go missing in the closing summary most of all; tag counts there too, and mark a projection
+  `[estimate]`.
 - Measure the thing, not its shadow. The absence of an error string proves nothing. Never read an
   exit code through a pipe: `cmd | tail` reports the status of `tail`.
+- Run it bare or read `${PIPESTATUS[0]}`. Grepping can miss unpredicted failure wording.
 - Assert a property in a commit message or PR description only when you tested it. "Unverified, and
   here is what I could not prove" is a useful result.
+- Impact words such as "outage", "live", and "broken" need a measurement or `[unverified]` tag.
+- Override an instruction only when a measurement disproves its premise. Cite it and give the undo.
+- After a crash or restart, ask every live process for its status.
 
 ## Calling code you did not write
 
-- Read the definition before the call site. Six bugs in one script came from assuming helpers did
-  more than they did: one took two arguments and silently discarded a third that looked like a
-  default, one wrote a file but set no shell variable, one exported a name that was never assigned,
-  and the closing function had a different name than the one called. All six passed a syntax check.
-- Guessing an identifier is worse when it works. A guessed resource name that fails costs five
-  minutes; one that happens to be right hides the habit until the next environment. Discover it:
-  ask the API, and when a config declares no default, find out why.
+- Read the definition before the call site.
+- Guessing an identifier is worse when it works. Discover it through the API.
+  When a config declares no default, find out why.
 - Assert your anchors. Before editing by string replacement, check the pattern matches exactly once.
-  A silent no-op edit reads as success. The rule caught itself being written: the heading this text
-  was first anchored to did not exist.
+- A template is not a description of production. Diff live state against it before applying; to
+  change one property, patch that property.
 
 ## Before you claim the work is done
 
@@ -36,6 +38,7 @@ somewhere else, put it in the private layer.
 - Name every downstream caller of each interface you changed, including callers outside this repo:
   internal apps, pipelines, dashboards, MCP consumers. A change that is correct in-repo still breaks
   the caller you never opened.
+- Update each caller and tick it off a written list. Grep output is not an update.
 - Run the tests, paste the real output, then summarise.
 
 ## Scope
@@ -43,6 +46,9 @@ somewhere else, put it in the private layer.
 - Asked to investigate or diagnose, deliver the diagnosis. Write an issue or an ADR when the fix
   belongs to someone else. Wait for approval before you implement.
 - Do not gate requested work behind an audit or a prerequisite you invented. Ask first.
+- A standing grant overrides approval only for its named queue. Say what a merge triggers before
+  accepting it. Still verify the reviewed SHA, branch state, checks, and pinned merge head.
+- When the human questions architecture, name the forcing boundary and file the real-fix ticket.
 
 ## Optional measurement and simplification
 
@@ -74,6 +80,11 @@ produced it.
 Named configs live in `configs/`. Pick one at the start of a stretch of work and say which one you
 are on. When a config forces the reviewer to share the author's weights, say so in the PR.
 
+When the independent reviewer is unavailable, fall back in order: a different model with no shared
+context, then a same-vendor pass. Declare the rung in the PR. One lucky self-probe does not license
+same-weights review. Do not kill a build mid-flight to switch vendor; the new vendor takes the next
+role.
+
 Configs are directional. `lean`, `default`, and `deep` require Claude Code as the orchestrator.
 Claude Code can call the Codex reviewer through its plugin. Codex has no reciprocal Claude plugin.
 Its only route to Claude is a `claude -p` subprocess. That subprocess can provide an external
@@ -84,6 +95,10 @@ cross-vendor pass, but it is not the `deep` reviewer lane. When Codex holds the 
 
 Two lanes on the same fixed point. They overlap almost nowhere, so run both. Neither replaces the
 other.
+
+No diff exempts itself from a lane: "docs-only", "just a rename", "I already validated it" are the
+author grading their own work. A crash does not skip the gate either. Name any lane that did not
+run, and why. Stop a review loop out loud when a round has no independent signal left.
 
 - **Defects and test quality.** `delegate review <base-ref>` validates the ref and pins
   `<base-ref>...HEAD` against the merge-base before it spends anything. Dispatch the `reviewer`
@@ -105,16 +120,18 @@ other.
   your expectation of it.
 - Run `git diff --check` and the project's own test command at minimum.
 - A test that has never failed proves nothing. Make it fail before trusting a green run: mutate the
-  code or the input and watch it go red. Three tests in one file passed while checking nothing,
-  because a regex matched a comment instead of the thing under test.
-- Never edit files while a suite runs against them. A mutation run overlapping a full suite gave a
-  result that took 1h48m instead of 9m with a changed skip count. That number was unusable, and only
-  a second clean run revealed it had been meaningless.
+  code or the input and watch it go red.
+- Never edit files while a suite runs against them.
+- Before you measure, say what the broken world would show. A probe that reads the same either way
+  proves nothing. This applies to browser probes, DOM reads and grep confirmations, not only
+  suites.
+- Prove an operational workflow with one real run before merge, even if it needs a throwaway tag.
 
 ## Issue tracker
 
 - The tracker holds the plan. The forge holds the review and the merge.
-- Keep the issue id in the branch name and the PR title.
+- Keep the issue id in the branch name and the PR title. Get the id before you branch; a PR cannot
+  be renamed later. A fix for a second issue gets its own branch.
 - After each verified milestone, comment on the issue: what changed, what is proven, what is still
   unverified, the next step, and the commands to resume. Do this unasked. It is what survives a
   context compaction.
@@ -124,10 +141,8 @@ other.
 A tracker decays, and a decayed board costs more than an empty one. The `cleanup-crew` skill runs
 these as passes; the rules matter on their own.
 
-- **A stale ticket at top priority is worse than no ticket.** Two tickets once sat at Urgent with a
-  `DO NOT RUN` block at the top of the body, so the queue advertised as most important the one action
-  nobody must take. When a decision invalidates a ticket, resolve it the same day. Do not annotate it
-  and leave the priority alone.
+- **A stale ticket at top priority is worse than no ticket.** When a decision invalidates a ticket,
+  resolve it the same day. Do not annotate it and leave the priority alone.
 - **Stale has three shapes, and one rule loses two of them.** Cancel a ticket only when its premise is
   false *and* nothing is left to deliver. Rewrite it when the method died but the payload is still
   wanted. Reframe it when the framing died and the substance is live. A blanket close-if-stale rule
@@ -136,9 +151,7 @@ these as passes; the rules matter on their own.
   ticket Done corrupts every later reading of what shipped.
 - **Name what a closure does not carry.** List the still-wanted parts of a superseded ticket and where
   each went. Where a part went nowhere, say so, rather than implying coverage.
-- **Measure the premise, do not read it.** A ticket that annotates itself as invalid is usually right
-  about its method and often wrong about its problem. A ticket asserting a field was empty everywhere
-  had it populated on every row.
+- **Measure the premise, do not read it.** A ticket can reject its method but misstate its problem.
 - **A child issue does not inherit its parent's project.** Set the project explicitly on every child,
   or the subtree becomes unreachable from every project view.
 
@@ -147,9 +160,13 @@ these as passes; the rules matter on their own.
 - Prefix branches `feat/`, `fix/`, `refactor/`, `docs/`, `chore/`. Never a personal prefix.
 - Before pushing, check `git status --short --branch`, keep commits focused, leave no temp files, and
   rebase on the default branch if you have drifted.
-- PR body sections: Description, User-facing or operational impact, What changed, Validation.
+- PR body sections: copy the repo's PR template headings exactly; CI can gate on the text. With no
+  template: Description, User-facing or operational impact, What changed, Validation.
 - Write a markdown-heavy PR body to a temp file so the backticks survive the shell, then delete it.
-  A quoted phrase inside `-m` breaks the commit and the push afterwards still looks like it worked.
+
+### Releases
+
+Prefer release-tag deploys; state when merges deploy. Agents never cut releases; the operator tags.
 
 ## Library and API docs
 
@@ -162,6 +179,9 @@ these as passes; the rules matter on their own.
 
 ASD-STE100 Simplified Technical English for READMEs, docs, PR descriptions, issues and comments.
 Chat replies, commit messages and code comments keep normal style.
+
+Chat instructions arrive terse, batched and with typos. Execute every item from context; ask only
+when two readings lead to materially different work.
 
 - Use the active voice. Use the imperative for instructions.
 - One instruction per sentence. Instructions stay under 20 words, descriptive sentences under 25.

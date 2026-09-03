@@ -2,11 +2,13 @@
 name: dogfood-local
 description: >-
   Runs the app on a local server and drives it in a real browser to judge
-  rendered changes before they become pull requests. Fires on a single frontend
-  pass, and equally on a batch frontier of rendered-surface branches — dogfood
-  the whole batch from one integration worktree instead of shipping a PR per
-  look. Use before opening any PR with a rendered surface, and whenever the
-  open question is visual rather than logical. Replaces deciding on production.
+  rendered changes before they become pull requests. On any rendered-surface
+  change traceable to prose requirements, a stakeholder email, or a mockup, run
+  it BEFORE the review lanes, not after: hands-on use found three defects that
+  four diff reviews missed, because the wrong code path looked right. Fires
+  on a single frontend pass, and equally on a batch frontier of rendered-surface
+  branches — dogfood the whole batch from one integration worktree instead of
+  shipping a PR per look. Replaces deciding on production.
 ---
 
 # Dogfood local
@@ -52,6 +54,14 @@ for b in <branch> <branch>; do git merge --no-edit "origin/$b"; done
 
 A clean merge here is also the cheapest possible check that the branches do not collide. A conflict
 at this step is a finding, not an obstacle.
+
+Before you judge anything rendered, prove the workspace: `git log` shows the PRs you expect on the
+base, and every gitignored env file the app reads is present. A stale local `main` once had a browser
+pass confirming pre-fix code, and a missing `frontend/.env` was reported as a login defect.
+
+A mockup or spec HTML is directional, not a pixel target. When the human says "looks off", ask for
+one concrete delta (a font weight, a spacing, a component) and measure that against the live reference
+app.
 
 **Done when** every in-flight branch is merged and the tree builds.
 
