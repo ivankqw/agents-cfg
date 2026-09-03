@@ -184,6 +184,7 @@ Prefer release-tag deploys; state when merges deploy. Agents never cut releases;
 
 ASD-STE100 Simplified Technical English for READMEs, docs, PR descriptions, issues and comments.
 Chat replies, commit messages and code comments keep normal style.
+STE is for docs a reader follows. An essay that argues by analogy keeps its metaphors and says they are metaphors.
 
 Chat instructions arrive terse, batched and with typos. Execute every item from context; ask only
 when two readings lead to materially different work.
