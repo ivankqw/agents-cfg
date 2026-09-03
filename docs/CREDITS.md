@@ -17,6 +17,7 @@ This repository keeps upstream work connected to its source. `skills-lock.json`,
   [treehouse](https://github.com/kunchenguid/treehouse) under the MIT License.
 - [Vercel Labs](https://github.com/vercel-labs/skills) supplies `find-skills`.
   The repository uses the MIT License.
+- [Herdr](https://github.com/herdrdev/herdr) supplies the terminal-pane runtime and its skill.
 - [Cursor](https://github.com/cursor/plugins) supplies `deslop`.
   The repository metadata states no license.
 - [Hardik Pandya](https://github.com/hardikpandya/stop-slop) created `stop-slop` under the MIT License.

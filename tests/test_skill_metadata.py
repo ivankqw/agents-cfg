@@ -578,6 +578,14 @@ class SkillMetadataTest(unittest.TestCase):
 
         self.assertLess(text.index("preflight-pstack"), text.index('"$DEST/install.sh"'))
 
+    def test_bootstrap_requires_restored_herdr_skill(self) -> None:
+        text = (ROOT / "bootstrap.sh").read_text()
+
+        self.assertIn("Herdr restore failed", text)
+        self.assertLess(text.index('"$DEST/install.sh"'), text.index("Herdr restore failed"))
+        catalog = json.loads((ROOT / "skills-catalog.json").read_text())
+        self.assertEqual(catalog["skills"]["herdr"]["source"], "herdrdev/herdr")
+
     def test_bootstrap_uses_install_for_catalog_restore(self) -> None:
         text = (ROOT / "bootstrap.sh").read_text()
 
@@ -690,7 +698,16 @@ class SkillMetadataTest(unittest.TestCase):
         npx = fakebin / "npx"
         npx.write_text("#!/usr/bin/env bash\nexit 0\n")
         npx.chmod(0o755)
+        for name in ("claude", "codex"):
+            executable = fakebin / name
+            executable.write_text(
+                "#!/usr/bin/env bash\n"
+                f"printf '%s\\n' \"$*\" >> \"$HOME/{name}-mcp.args\"\n"
+            )
+            executable.chmod(0o755)
         env = self.base_runtime_env(home, fakebin, pstack=pstack)
+        env["CONTEXT7_API_KEY"] = "test-token"
+        env["EXECUTOR_MCP_URL"] = "https://executor.example/mcp"
 
         result = subprocess.run(
             [str(ROOT / "install.sh")],
@@ -703,6 +720,27 @@ class SkillMetadataTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertFalse((home / "skills-lock.json").exists())
+        claude_args = (home / "claude-mcp.args").read_text()
+        self.assertIn(
+            "mcp add --scope user --transport http context7 https://mcp.context7.com/mcp "
+            "--header CONTEXT7_API_KEY: test-token",
+            claude_args,
+        )
+        self.assertIn(
+            "mcp add --scope user --transport http executor https://executor.example/mcp",
+            claude_args,
+        )
+        codex_args = (home / "codex-mcp.args").read_text()
+        self.assertIn("mcp add exa --url https://mcp.exa.ai/mcp", codex_args)
+        self.assertIn(
+            "mcp add executor --url https://executor.example/mcp",
+            codex_args,
+        )
+        self.assertNotIn("context7", codex_args)
+        self.assertIn(
+            "skip context7 for Codex: header CONTEXT7_API_KEY is not bearer auth",
+            result.stdout,
+        )
 
     def test_install_and_update_paths_share_unlock_command(self) -> None:
         install = (ROOT / "install.sh").read_text()

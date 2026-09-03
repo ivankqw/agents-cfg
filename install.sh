@@ -147,21 +147,38 @@ link "$HOME/AGENTS.md" "$CODEX_DIR/AGENTS.md"
 link "$AC/configs/pstack-codex.md" "$CODEX_DIR/pstack-models.md"
 
 echo "== mcp servers (keys from env; nothing secret is stored in this repo)"
-if command -v claude >/dev/null && [ -f "$AC/mcp/servers.json" ]; then
+if [ -f "$AC/mcp/servers.json" ]; then
   python3 - "$AC/mcp/servers.json" <<'PY'
-import json,os,subprocess,sys
+import json, os, shutil, subprocess, sys
+
 for s in json.load(open(sys.argv[1]))["servers"]:
     name = s["name"]
     url = os.environ.get(s["url_env"]) if "url_env" in s else s["url"]
     if not url:
         print(f"  skip {name}: ${s['url_env']} not set"); continue
     env = s.get("header_env")
-    if env and not os.environ.get(env):
-        print(f"  skip {name}: ${env} not set"); continue
-    cmd=["claude","mcp","add","--scope","user","--transport","http",name,url]
-    if env: cmd += ["--header", f"{s['header_name']}: {os.environ[env]}"]
-    r=subprocess.run(cmd,capture_output=True,text=True)
-    print(f"  {'ok' if r.returncode==0 else 'exists/failed'} {name}")
+    if shutil.which("claude"):
+        if env and not os.environ.get(env):
+            print(f"  skip {name} for Claude: ${env} not set")
+        else:
+            cmd = ["claude", "mcp", "add", "--scope", "user", "--transport", "http", name, url]
+            if env:
+                cmd += ["--header", f"{s['header_name']}: {os.environ[env]}"]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            state = "ok" if result.returncode == 0 else "exists/failed"
+            print(f"  {state} {name} for Claude")
+    if shutil.which("codex"):
+        cmd = ["codex", "mcp", "add", name, "--url", url]
+        if env:
+            if s.get("header_name", "").lower() != "authorization":
+                print(
+                    f"  skip {name} for Codex: header {s['header_name']} is not bearer auth"
+                )
+                continue
+            cmd += ["--bearer-token-env-var", env]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        state = "ok" if result.returncode == 0 else "exists/failed"
+        print(f"  {state} {name} for Codex")
 PY
 fi
 

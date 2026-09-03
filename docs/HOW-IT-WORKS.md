@@ -44,36 +44,8 @@ I consume upstream skills from their source origin. `skills-lock.json` records s
 `bin/skills-update` runs `npx skills update`. The repository stores the lockfile and does not copy
 those skill folders.
 
-[Matt Pocock's skills repository](https://github.com/mattpocock/skills) supplies these recorded
-skills:
-
-- `ask-matt`
-- `code-review`
-- `codebase-design`
-- `diagnosing-bugs`
-- `domain-modeling`
-- `grill-me`
-- `grill-with-docs`
-- `grilling`
-- `handoff`
-- `implement`
-- `improve-codebase-architecture`
-- `prototype`
-- `research`
-- `resolving-merge-conflicts`
-- `setup-matt-pocock-skills`
-- `tdd`
-- `teach`
-- `to-questionnaire`
-- `to-spec`
-- `to-tickets`
-- `triage`
-- `wait-what`
-- `wayfinder`
-- `wizard`
-- `writing-for-agents`
-
-`skills-lock.json` records each name and source path.
+[Matt Pocock's skills repository](https://github.com/mattpocock/skills) supplies recorded skills.
+`skills-lock.json` is the current list of names and source paths.
 
 [pstack](https://github.com/michael-denyer/pstack-claude) comes from @poteto's original pstack work.
 `bootstrap.sh` clones the port from the source named by `PSTACK_REPO`. It checks out the commit in
@@ -83,6 +55,9 @@ repository neither copies pstack nor adds it to `skills-lock.json`.
 `npx skills` installs ordinary upstream skill folders under `~/.agents/skills`. The installer uses
 symlinks for own skills, pstack, and harness exposure. Each lockfile entry keeps the upstream source
 and revision data.
+
+Herdr runs Codex implementation agents in observable terminal panes. `skills-lock.json` records the
+`herdrdev/herdr` skill source. `bootstrap.sh` stops if restoration does not create the Herdr skill.
 
 ## Agents isolate a responsibility
 
@@ -132,8 +107,12 @@ A tenant URL identifies an account, so the executor declaration uses `url_env` w
 `EXECUTOR_MCP_URL`. The installer reads the URL from the environment and skips the server when the
 variable has no value. The file stores no API key or tenant URL.
 
-The current MCP installation block calls the Claude CLI. Codex-only machines do not receive those
-declarations from `install.sh`.
+The MCP installation block calls both the Claude and Codex CLIs when they are present. Codex accepts
+bearer-token environment variables, but it cannot reproduce arbitrary HTTP header names. The
+installer prints a skip reason for those entries.
+
+Hermes support remains experimental. `docs/INSTALL.md` describes the manual context, skill, MCP, and
+canary steps. The installer does not edit `~/.hermes/config.yaml`.
 
 ## The layers keep different change rates apart
 

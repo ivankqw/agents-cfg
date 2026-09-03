@@ -94,6 +94,27 @@ Treat a missing phrase, model, or skill as an install failure. Run `~/agents-cfg
 its Codex settings report. Merge any missing setting from
 `settings/codex.config.template.toml`, restart Codex, and repeat the check.
 
+## Try Hermes Agent experimentally
+
+Hermes support is experimental. `bootstrap.sh` and `install.sh` do not configure Hermes.
+
+1. Install Hermes and select a model with `hermes model`. Follow the
+   [Hermes quickstart](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/getting-started/quickstart.md).
+2. Use the project `AGENTS.md`. Do not add a `HERMES.md`. Hermes reads `AGENTS.md` when no
+   higher-priority Hermes context file exists. See the
+   [Hermes context-file documentation](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/context-files.md).
+3. Link the own and upstream skill directories from their recorded sources into
+   `~/.hermes/skills`. Do not copy them. Use `skills-lock.json` and `pstack-revision.txt` as the
+   source records.
+4. Generate `mcp_servers` entries in `~/.hermes/config.yaml` from `mcp/servers.json`. Keep secrets in
+   their named environment variables. See the
+   [Hermes MCP documentation](https://github.com/NousResearch/hermes-agent/blob/main/skills/autonomous-ai-agents/hermes-agent/references/native-mcp.md).
+5. Start Hermes outside a project. Ask whether its instructions contain `A virtue cannot be graded`.
+   Ask it to list one linked skill and one configured MCP server. Treat any missing item as an
+   experimental setup failure.
+
+Do not use `hermes import-agent claude-code` unless you prove that it preserves source links.
+
 ## Update the setup
 
 Sync the portable layer and upstream skills, then refresh the generated files and links:
@@ -113,7 +134,8 @@ Use `bin/skills-sync run --no-push` when you want to review the generated commit
 See [Keep upstream skills in sync](SYNC.md) for removal safeguards, ignored skills, lockfile
 locations, and schedule generation.
 
-Run both verification checks after an update.
+Run the Claude Code and Codex verification checks after an update. Repeat the Hermes canary if you
+use the experimental setup.
 
 ## Uninstall the setup
 
