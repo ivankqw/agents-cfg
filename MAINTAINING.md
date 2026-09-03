@@ -35,6 +35,12 @@ bin/skills-sync normalize
 git diff skills-catalog.json
 ```
 
+Add intentionally untracked skill names to `skills-ignore.txt`. Use one glob per line. The
+normalizer excludes matching lockfile entries, and the checker ignores matching installed folders.
+The larksuite skills stay outside the committed catalog because they are managed separately.
+The normalizer retains existing `download` entries. The skills CLI does not record archive installs
+in its live lockfile, so remove an obsolete archive entry from the catalog by hand.
+
 If an imported skill must stay explicit-use-only, add or update its description override in
 `scripts/skill_metadata.py`. `install.sh` applies and checks those overrides in `~/.agents/skills`
 after each restore or update, so Codex sees the constrained triggers.

@@ -1,0 +1,2 @@
+# MAINTAINING.md excludes larksuite skills from the committed catalog on purpose.
+lark-*

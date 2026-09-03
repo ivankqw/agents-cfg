@@ -174,6 +174,69 @@ class SkillsSyncTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("uncatalogued installed skill: extra", result.stdout)
 
+    def test_check_ignores_matching_folder_and_reports_other_extra(self) -> None:
+        _, home = self.make_home()
+        repo = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(repo))
+        self.write_catalog(repo, {})
+        (repo / "skills-ignore.txt").write_text("# managed separately\nlark-*\n")
+        self.create_skill(home, "lark-calendar")
+        self.create_skill(home, "unknown-skill")
+
+        result = self.run_cli(repo, home, "check")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("uncatalogued installed skill: lark-calendar", result.stdout)
+        self.assertIn("uncatalogued installed skill: unknown-skill", result.stdout)
+
+    def test_normalize_excludes_ignored_live_lock_entry(self) -> None:
+        _, home = self.make_home()
+        repo = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(repo))
+        (repo / "skills-ignore.txt").write_text("# managed separately\nlark-*\n")
+        self.write_lock(
+            home,
+            {
+                "alpha": {
+                    "source": "example/alpha",
+                    "sourceType": "github",
+                    "sourceUrl": "https://example.test/alpha.git",
+                    "skillPath": "SKILL.md",
+                },
+                "lark-calendar": {
+                    "source": "larksuite/lark-calendar",
+                    "sourceType": "github",
+                    "sourceUrl": "https://example.test/lark-calendar.git",
+                    "skillPath": "SKILL.md",
+                },
+            },
+        )
+
+        result = self.run_cli(repo, home, "normalize")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        skills = json.loads((repo / "skills-catalog.json").read_text())["skills"]
+        self.assertEqual(list(skills), ["alpha"])
+
+    def test_normalize_preserves_cataloged_download_archive(self) -> None:
+        _, home = self.make_home()
+        repo = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(repo))
+        archive = {
+            "source": "https://codeload.github.com/example/skills/tar.gz/abc123",
+            "sourceType": "download",
+            "sourceUrl": "https://codeload.github.com/example/skills/tar.gz/abc123",
+            "skillPath": "skills/archive-skill/SKILL.md",
+        }
+        self.write_catalog(repo, {"archive-skill": archive})
+        self.write_lock(home, {})
+
+        result = self.run_cli(repo, home, "normalize")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        skills = json.loads((repo / "skills-catalog.json").read_text())["skills"]
+        self.assertEqual(skills, {"archive-skill": archive})
+
     def test_check_exits_nonzero_for_broken_catalog(self) -> None:
         _, home = self.make_home()
         repo = pathlib.Path(tempfile.mkdtemp())

@@ -11,6 +11,7 @@ Commands:
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import os
 import pathlib
@@ -57,7 +58,26 @@ def load_json(path: pathlib.Path) -> Any:
         raise ValueError(f"invalid JSON in {path}: {error}") from error
 
 
-def normalized_catalog(lock: object) -> dict[str, object]:
+def load_ignore_patterns(root: pathlib.Path) -> tuple[str, ...]:
+    path = root / "skills-ignore.txt"
+    if not path.is_file():
+        return ()
+    return tuple(
+        line
+        for raw_line in path.read_text().splitlines()
+        if (line := raw_line.strip()) and not line.startswith("#")
+    )
+
+
+def is_ignored(name: str, patterns: tuple[str, ...]) -> bool:
+    return any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns)
+
+
+def normalized_catalog(
+    lock: object,
+    ignore_patterns: tuple[str, ...] = (),
+    retained_entries: dict[str, dict[str, str]] | None = None,
+) -> dict[str, object]:
     if not isinstance(lock, dict) or not isinstance(lock.get("skills"), dict):
         raise ValueError("live lockfile must contain a skills object")
     raw_skills = lock["skills"]
@@ -66,8 +86,14 @@ def normalized_catalog(lock: object) -> dict[str, object]:
         for name, entry in raw_skills.items()
     ):
         raise ValueError("live lockfile contains an invalid skill entry")
-    skills: dict[str, dict[str, str]] = {}
+    skills = {
+        name: entry
+        for name, entry in (retained_entries or {}).items()
+        if not is_ignored(name, ignore_patterns)
+    }
     for name in sorted(raw_skills):
+        if is_ignored(name, ignore_patterns):
+            continue
         entry = raw_skills[name]
         missing = [
             field
@@ -77,16 +103,31 @@ def normalized_catalog(lock: object) -> dict[str, object]:
         if missing:
             raise ValueError(f"live lock entry {name} is missing: {', '.join(missing)}")
         skills[name] = {field: entry[field] for field in CATALOG_FIELDS}
-    return {"skills": skills}
+    return {"skills": dict(sorted(skills.items()))}
 
 
-def catalog_text(lock: object) -> str:
-    return json.dumps(normalized_catalog(lock), indent=2) + "\n"
+def catalog_text(
+    lock: object,
+    ignore_patterns: tuple[str, ...] = (),
+    retained_entries: dict[str, dict[str, str]] | None = None,
+) -> str:
+    return json.dumps(
+        normalized_catalog(lock, ignore_patterns, retained_entries), indent=2
+    ) + "\n"
 
 
 def normalize(root: pathlib.Path) -> None:
     catalog = root / "skills-catalog.json"
-    content = catalog_text(load_json(live_lock_path()))
+    retained_entries: dict[str, dict[str, str]] = {}
+    if catalog.is_file():
+        retained_entries = {
+            name: entry
+            for name, entry in load_catalog(root).items()
+            if entry["sourceType"] == "download"
+        }
+    content = catalog_text(
+        load_json(live_lock_path()), load_ignore_patterns(root), retained_entries
+    )
     if catalog.is_file() and catalog.read_text() == content:
         print("catalog unchanged")
         return
@@ -131,8 +172,11 @@ def load_catalog(root: pathlib.Path) -> dict[str, dict[str, str]]:
 
 def validation_problems(root: pathlib.Path, shared: pathlib.Path) -> list[str]:
     catalog = load_catalog(root)
+    ignore_patterns = load_ignore_patterns(root)
     problems: list[str] = []
     for name in sorted(catalog):
+        if is_ignored(name, ignore_patterns):
+            continue
         skill_dir = shared / name
         if not skill_dir.is_dir():
             problems.append(f"missing catalog skill: {name}")
@@ -144,6 +188,8 @@ def validation_problems(root: pathlib.Path, shared: pathlib.Path) -> list[str]:
         return problems
     for entry in sorted(shared.iterdir(), key=lambda path: path.name):
         if entry.is_symlink() or not entry.is_dir():
+            continue
+        if is_ignored(entry.name, ignore_patterns):
             continue
         if not (entry / "SKILL.md").is_file():
             problems.append(f"installed skill folder has no SKILL.md: {entry.name}")
