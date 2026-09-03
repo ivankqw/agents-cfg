@@ -1,67 +1,32 @@
 # agents-cfg
 
-My agent setup for [Claude Code](https://code.claude.com) and
-[Codex](https://developers.openai.com/codex): working conventions, a few skills I wrote, an
-adversarial code reviewer, an advisory pre-push hook, and a script that routes review work.
+I treat Claude Code or Codex with its model as a base model. I overfit the context to my work
+with conventions, skills, agents, configs, and hooks. The harness stays thin. The skills carry the
+procedures, examples, and failure stories that make the agent work the way I work.
 
-Runs on Linux and macOS. Everything installs by symlink, so `git pull` takes effect at once.
-
-## Quick start
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ivankqw/agents-cfg/main/bootstrap.sh | bash
+```mermaid
+flowchart TB
+    O[Operator] --> P[Portable layer]
+    P --> C[Conventions]
+    P --> S[Skills]
+    P --> A[Agents and configs]
+    P --> H[Hooks and MCP declarations]
+    C --> B[Base model]
+    S --> B
+    A --> B
+    H --> B
+    R[Private layer] --> B
+    B --> W[Work]
 ```
 
-Step by step:
+Read the documentation by purpose:
 
-```bash
-git clone git@github.com:ivankqw/agents-cfg.git ~/agents-cfg
-~/agents-cfg/bootstrap.sh
-export PATH="$HOME/.local/bin:$PATH"   # add to your shell profile
-```
+- [Thesis](docs/THESIS.md) explains the personal overfitting argument.
+- [How it works](docs/HOW-IT-WORKS.md) explains each layer and its source file.
+- [Install](docs/INSTALL.md) installs, verifies, updates, and removes the setup.
+- [Skill sync](docs/SYNC.md) explains lockfile drift and the planned catalog workflow.
+- [Glossary](docs/GLOSSARY.md) defines the shared terms.
+- [Credits](docs/CREDITS.md) names upstream authors, sources, and licences.
+- [Maintaining](MAINTAINING.md) gives repository editing and verification rules.
 
-Pointing an agent at this repo? Give it the URL and tell it to read [`AGENTS.md`](./AGENTS.md).
-That file holds the install steps, what the install touches, and how to check it worked.
-
-## How it is put together
-
-**One place for my setup.** What lives here is method: how I want an agent to verify a claim, when
-a change gets reviewed and by whom, how findings get written down. Nothing in this repo names an
-employer, a host, or a person.
-
-Employer conventions and domain memory sit in a separate private repo. `install.sh` layers that on
-top when it finds one at `~/agents-cfg-private`, or wherever `$PRIVATE_CONFIG` points.
-
-**One source, two harnesses.** Claude Code reads `CLAUDE.md` and expands `@imports`, so
-`install.sh` writes `~/.claude/CLAUDE.md` with one import per layer. Codex reads `AGENTS.md`, where
-import support is not documented, so the layers get concatenated into `~/AGENTS.md`. Re-run
-`install.sh` after you edit a convention, or Codex keeps reading a stale copy.
-
-**Third-party skills stay upstream.** Most of my skills come from other people's repos and are
-managed by [`npx skills`](https://www.npmjs.com/package/skills), which keeps them in
-`~/.agents/skills` with a lockfile. Copying them in here would pin them to one commit and cut them
-off from `npx skills update`. This repo carries `skills-lock.json` instead, and
-`npx skills experimental_install` restores each skill at its recorded commit. Only skills I wrote
-live in `skills/`.
-
-**pstack stays pinned.** Bootstrap checks out one recorded pstack revision under
-`~/.local/share/agent-plugins`. Install links its skills into `~/.agents/skills`. It links its Codex
-prompts into `~/.codex/prompts`. It does not vendor pstack into this repo.
-
-**Codex settings stay user-owned.** Install does not edit `~/.codex/config.toml`. It reports missing
-settings. Merge `settings/codex.config.template.toml` to enable hooks, pstack, and multi-agent work.
-
-**Nothing secret.** The install writes no credential. MCP servers are declared by name and URL in
-`mcp/servers.json`; keys come from the environment, and a server whose key is missing gets skipped.
-
-## Layout
-
-See the table in [`AGENTS.md`](./AGENTS.md).
-
-## License
-
-MIT. See [LICENSE](./LICENSE).
-
-`agents/reviewer.md` adapts the adversarial stance, attack-surface list, and calibration rules from
-the Codex plugin for Claude Code, Copyright 2026 OpenAI, under the Apache License 2.0. See
-[NOTICE](./NOTICE).
+The repository uses the MIT License. See [LICENSE](LICENSE). `NOTICE` records adapted material.
