@@ -1,84 +1,44 @@
 # Configs
 
-A config names which model and effort level fills each role for a stretch of work. Switching config
-is one decision instead of three, and naming them means you can say "run this on `lean`" and be
-understood.
+A config assigns a harness, model, and effort level to each role for one stretch of work. Choose the
+config before work starts. Record any fallback in the pull request.
 
 ## Roles
 
-| Role | Does | Wants |
+| Role | Responsibility | Preferred property |
 |---|---|---|
-| `orchestrator` | Holds the plan, makes the decisions, keeps the main context | Judgement over speed. This is the one worth spending on. |
-| `implementer` | Builds to a spec in a fresh context, in parallel | Throughput. It works from an explicit brief, so it needs less depth. |
-| `reviewer` | Attacks a finished diff | Independence first, depth second. |
+| `orchestrator` | Holds the plan and makes decisions. | Judgment. |
+| `implementer` | Builds from an explicit brief in a fresh Herdr pane. | Throughput. |
+| `reviewer` | Attacks the finished diff without the author's context. | Independence. |
 
-## The one rule that is not a preference
+The reviewer must not use the model that wrote the code. Use a different vendor when possible. If
+only one vendor is available, use different model weights and require executed evidence.
 
-**The reviewer must not be the model that wrote the code.** A reviewer sharing weights with the
-author shares its blind spots, and a shared blind spot is invisible from the inside. Prefer a
-different vendor. Where that is not available, use a different model, and require the reviewer to run
-the tests and cite command plus output, because executed evidence does not care whose weights
-produced it.
-
-## Reading a config
-
-The `reviewer` entry names the model you *want* reviewing. Where a router tries that model first and
-falls back when it is unavailable, the fallback reviewer runs on whatever the agent definition pins,
-which is not a contradiction: the config states the intent, the agent definition states the floor.
-When the fallback fires, the review is no longer cross-vendor. Say so.
-
-## Choosing
+## Choose a config
 
 | Config | Harness | Orchestrator | Implementer | Reviewer | Use it when |
 |---|---|---|---|---|---|
-| `lean` | Claude Code | Sonnet 5 | Haiku 4.5 | Codex Sol | The plan is simple and the volume is high. |
-| `default` | Claude Code | Opus 5 | Sonnet 5 | Codex Sol | Ordinary work. |
-| `deep` | Claude Code | Fable 5 | Sonnet 5 | Codex Sol, then Opus 5 | Risky diffs, migrations, anything pre-deploy. |
-| `single-vendor` | Codex | GPT-5.6 Sol Medium | GPT-5.6 Luna XHigh | GPT-5.6 Terra Medium | Codex owns the session, so cross-vendor review is unavailable. |
+| `default` | Claude Code | Claude Opus 5 | GPT-5.6 Sol in Herdr | Fresh Claude Sonnet 5 subagent | Claude Code is available. |
+| `single-vendor` | Codex | GPT-5.6 Sol | GPT-5.6 Luna | GPT-5.6 Terra | Claude is unavailable. |
 
-## Harness direction is not symmetric
+The default path keeps implementation visible in Herdr panes. It gives each implementation task a
+fresh Codex context. Dispatch the reviewer as a fresh Sonnet subagent. Never use Opus for a Claude
+subagent.
 
-`lean`, `default`, and `deep` assume that Claude Code owns the main session. Claude Code calls the
-Codex reviewer through the Codex plugin. This gives those configs their cross-vendor review lane.
+Use `single-vendor` only as the no-Claude fallback. Its reviewer uses different Codex weights from
+the author and receives no shared context.
 
-Codex has no reciprocal Claude plugin. Its only route to Claude is a `claude -p` subprocess. That
-subprocess can provide an external cross-vendor pass, but it does not supply the reviewer configured
-by `deep`. Use `single-vendor` when Codex owns the main session. If the work needs the configured
-cross-vendor review lane, start it from Claude Code and select `default` or `deep`.
+## Price reference
 
-Cost rises strictly down that list.
-
-## Roles follow proven capability
-
-Assign a vendor to a role by what its sandbox can do today, and re-probe when a blocker is fixed. Codex
-was review-only while its sandbox could not write to a worktree's git; once that was fixed, one probe
-made it a full implementer again. A permanent workaround for a fixed blocker is a config lie.
-
-Implementation lanes run as Codex agents in terminal panes, not as Claude subagents, so their spend
-and their weights stay separate from the orchestrator. When a Claude subagent is unavoidable, it runs
-on Sonnet, never Opus. A stated rule with no mechanism does not hold: an Opus implementer ran the same
-day the rule was stated. The table above still names Sonnet as implementer and is due a revision.
-
-## Price, so nobody guesses again
-
-Per million tokens, input / output, from the Anthropic pricing page (checked 2026-08-21):
+The following prices are US dollars per million tokens. The values come from the Anthropic pricing
+page, checked 2026-09-03.
 
 | Model | Input | Output |
-|---|---|---|
+|---|---:|---:|
 | Claude Fable 5 | $10 | $50 |
 | Claude Opus 5 | $5 | $25 |
 | Claude Sonnet 5 | $2 | $10 |
 | Claude Haiku 4.5 | $1 | $5 |
 
-**Fable 5 costs twice what Opus 5 costs.** It is the most capable widely released model, not the
-cheap one, so it belongs in `deep` and never in `lean`. Check the live page before trusting these:
-<https://platform.claude.com/docs/en/about-claude/pricing>
-
-Two things that move real cost more than the headline rate. Models from 4.7 onward use a newer
-tokenizer that produces roughly 30% more tokens for the same text, so a cheaper per-token rate on an
-older model is not always cheaper per unit of work. And a cache hit costs a tenth of the input rate,
-which usually dominates any model choice on a long session.
-
-Effort level names differ between harnesses, and not every model offers every level. Treat the levels
-here as intent: `low` for mechanical work, `medium` for ordinary judgement, `high` and above for
-work where being wrong is expensive.
+Check the [Anthropic pricing page](https://platform.claude.com/docs/en/about-claude/pricing) before
+using these figures in a cost decision. Effort level names differ between harnesses and models.

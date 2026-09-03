@@ -117,6 +117,12 @@ for f in "$AC"/hooks/*;      do link "$f" "$CLAUDE_DIR/hooks/$(basename "$f")"; 
 for f in "$AC"/hooks/*;      do link "$f" "$CODEX_DIR/hooks/$(basename "$f")"; done
 
 echo "== bin"
+STALE_DELEGATE="$BIN/delegate"
+if [ -L "$STALE_DELEGATE" ]; then
+  rm -f "$STALE_DELEGATE"
+elif [ -e "$STALE_DELEGATE" ]; then
+  echo "  ! not a symlink, leaving alone: $STALE_DELEGATE"
+fi
 for f in "$AC"/bin/*;        do link "$f" "$BIN/$(basename "$f")"; done
 [ -d "$PRIVATE/bin" ] && for f in "$PRIVATE"/bin/*; do link "$f" "$BIN/$(basename "$f")"; done
 

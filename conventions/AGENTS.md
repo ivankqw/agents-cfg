@@ -85,11 +85,9 @@ context, then a same-vendor pass. Declare the rung in the PR. One lucky self-pro
 same-weights review. Do not kill a build mid-flight to switch vendor; the new vendor takes the next
 role.
 
-Configs are directional. `lean`, `default`, and `deep` require Claude Code as the orchestrator.
-Claude Code can call the Codex reviewer through its plugin. Codex has no reciprocal Claude plugin.
-Its only route to Claude is a `claude -p` subprocess. That subprocess can provide an external
-cross-vendor pass, but it is not the `deep` reviewer lane. When Codex holds the plan, use
-`single-vendor`. Keep its reviewer on a different Codex model from the author.
+`default` uses Claude Code for orchestration, Codex in Herdr for implementation, and a fresh Sonnet
+subagent for review. Never use Opus for a Claude subagent. Use `single-vendor` only when Claude is
+unavailable. Keep its reviewer on a different Codex model from the author.
 
 ## Review before pushing
 
@@ -100,9 +98,8 @@ No diff exempts itself from a lane: "docs-only", "just a rename", "I already val
 author grading their own work. A crash does not skip the gate either. Name any lane that did not
 run, and why. Stop a review loop out loud when a round has no independent signal left.
 
-- **Defects and test quality.** `delegate review <base-ref>` validates the ref and pins
-  `<base-ref>...HEAD` against the merge-base before it spends anything. Dispatch the `reviewer`
-  reviewer as a new agent that starts with no memory of this conversation. A mechanism that shares
+- **Defects and test quality.** Dispatch the `reviewer` reviewer as a new Sonnet agent that starts
+  with no memory of this conversation. A mechanism that shares
   this session's context inherits the author's blind spots along with it. In Claude Code that means
   never dispatching it as a fork.
   Never tell it to skip what you already verified, because that is where a shared blind spot hides.

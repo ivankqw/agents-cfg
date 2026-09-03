@@ -12,9 +12,8 @@ I treat a harness and its selected model as one base model. The harness supplies
 tools, context controls, permissions, and memory. The model supplies language and judgment. I can
 change either part without rewriting the rest of this repository.
 
-`configs/single-vendor.yaml` shows one Codex base model arrangement. The other YAML files under
-`configs/` describe Claude Code arrangements. The config selects models for roles, while the
-harness owns execution.
+`configs/default.yaml` describes the Claude Code arrangement. `configs/single-vendor.yaml` describes
+the no-Claude fallback. The config selects models for roles, while the harness owns execution.
 
 ## Conventions set the default method
 
@@ -36,9 +35,9 @@ An agent sees a skill description before it sees the skill body. The description
 when to load the procedure. The body can carry worked examples, failure cases, and verification
 steps for one kind of work. This progressive disclosure keeps narrow guidance out of every session.
 
-I keep own skills under `skills/`. The current set includes `cleanup-crew`, `dogfood-local`,
-`ponytail`, and `ship`. `install.sh` links each own skill into `~/.agents/skills`. It links that
-shared directory into Claude Code.
+I keep own skills under `skills/`. The current set includes `cleanup-crew` and `dogfood-local`.
+`install.sh` links each own skill into `~/.agents/skills`. It links that shared directory into
+Claude Code.
 
 I consume upstream skills from their source origin. `skills-lock.json` records sources for the
 `skills` CLI. `bootstrap.sh` runs `npx skills experimental_install` from the home directory, and
@@ -87,24 +86,22 @@ and revision data.
 
 ## Agents isolate a responsibility
 
-An agent definition gives one role its own prompt and model. `agents/reviewer.md` defines the
-reviewer used when the external Codex route cannot run. `install.sh` links agent definitions into
-`~/.claude/agents`.
+An agent definition gives one role its own prompt and model. `agents/reviewer.md` defines the Sonnet
+reviewer for the default review lane. `install.sh` links agent definitions into `~/.claude/agents`.
 
 The reviewer must not use the model that wrote the change. `conventions/AGENTS.md` states the rule,
 and `configs/README.md` explains the reason. Models can share blind spots with another run of the
 same weights. A different model gives the review another failure pattern. The single-vendor config
 uses a different OpenAI model when Codex holds every role.
 
-`bin/delegate` tries the Codex reviewer for review and rescue work. It returns exit code 3 when the
-caller must use the reviewer agent. The script validates the requested Git range before it spends a
-review call.
+The default config dispatches the reviewer as a fresh Claude Sonnet subagent. The reviewer receives
+the repository path and diff range, but none of the author's conversation context.
 
 ## Configs make role choices explicit
 
-A config assigns a harness, model, and effort to each role. `configs/lean.yaml`,
-`configs/default.yaml`, `configs/deep.yaml`, and `configs/single-vendor.yaml` hold those choices.
-`configs/README.md` explains when to use each config.
+A config assigns a harness, model, and effort to each role. `configs/default.yaml` and
+`configs/single-vendor.yaml` hold those choices. `configs/README.md` explains when to use each
+config.
 
 Named configs turn several model choices into one operator decision. They expose compromises.
 For example, `configs/single-vendor.yaml` marks its reviewer as `cross_vendor: false` and requires a
@@ -118,8 +115,8 @@ file to the generated Codex instructions and links it at `~/.codex/pstack-models
 The model decides whether to load a skill. A hook does not depend on that decision. The harness runs
 a hook when a configured event matches.
 
-`hooks/review_reminder.py` adds advice before a shell command that contains `git push`. It asks
-operators to route direct Codex calls through `bin/delegate`. `hooks/cleanup_crew_after_pr.py` adds
+`hooks/review_reminder.py` adds advice before a shell command that contains `git push`. It asks the
+operator to dispatch the Sonnet reviewer as a fresh subagent. `hooks/cleanup_crew_after_pr.py` adds
 tracker advice after a pull request opens. Both hooks catch errors and exit without blocking work.
 
 `install.sh` links each hook into `~/.claude/hooks` and `~/.codex/hooks`. It does not edit harness

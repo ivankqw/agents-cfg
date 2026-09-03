@@ -33,7 +33,6 @@
   },
   "enabledPlugins": {
     "context7@claude-plugins-official": false,
-    "codex@openai-codex": true,
     "skill-creator@claude-plugins-official": false,
     "dagster-expert@dagster": true,
     "dignified-python@dagster": false,
@@ -41,12 +40,6 @@
     "superpowers@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
-    "openai-codex": {
-      "source": {
-        "source": "github",
-        "repo": "openai/codex-plugin-cc"
-      }
-    },
     "dagster": {
       "source": {
         "source": "github",

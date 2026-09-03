@@ -1,12 +1,12 @@
 name: default
-summary: Strong planner, cheap parallel builders, cross-vendor reviewer.
+summary: Claude Code plans, Codex implements in Herdr, and Sonnet reviews.
 when: Ordinary day-to-day work.
 harness: claude-code
 roles:
   orchestrator: { model: opus-5, effort: medium }
-  implementer:  { model: sonnet-5, effort: default, parallel: true }
-  reviewer:     { model: codex-sol, effort: high, cross_vendor: true }
+  implementer:  { model: gpt-5.6-sol, effort: medium, runtime: herdr, parallel: true }
+  reviewer:     { model: sonnet-5, effort: high, fresh_context: true, cross_vendor: true }
 notes: >-
-  The reviewer sits with a different vendor from the author, which is where its
-  independence comes from. If that vendor is unavailable, switch config rather
-  than quietly reviewing your own work.
+  Run each Codex implementer in a Herdr pane. Dispatch the reviewer as a fresh
+  Claude Sonnet subagent with no shared context. Never use Opus for a Claude
+  subagent. If Claude is unavailable, switch to single-vendor.

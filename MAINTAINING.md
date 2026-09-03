@@ -144,8 +144,8 @@ to generated Codex instructions because Codex does not support Claude `@imports`
   `bin/skills-sync normalize`.
 - **BSD and GNU differ.** `date -Iseconds`, `readlink -f`, `stat -c` and `sed -i` all behave
   differently on macOS. Prefer plain format strings.
-- **Harness direction is not symmetric.** Claude can call the Codex reviewer plugin. Codex has no
-  reciprocal Claude plugin. Select `single-vendor` when Codex owns the session.
+- **Harness direction is not symmetric.** The default config needs Claude Code to dispatch the
+  Sonnet reviewer. Select `single-vendor` when Claude is unavailable.
 
 ## Before you say it works
 
