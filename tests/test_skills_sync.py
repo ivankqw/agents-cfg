@@ -337,6 +337,54 @@ class SkillsSyncTests(unittest.TestCase):
         scheduled_path = shlex.split(cron)[5].removeprefix("PATH=")
         self.assertEqual(scheduled_path.split(os.pathsep)[0], str(linuxbrew.parent))
 
+    def test_skills_update_uses_fallback_npx(self) -> None:
+        _, home = self.make_home()
+        shared = home / ".agents" / "skills"
+        catalog = json.loads((ROOT / "skills-catalog.json").read_text())["skills"]
+        for name in catalog:
+            self.create_skill(home, name)
+        subprocess.run(
+            [
+                "/usr/bin/python3",
+                str(ROOT / "scripts" / "skill_metadata.py"),
+                "apply",
+                str(shared),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        npx = home / ".linuxbrew" / "bin" / "npx"
+        npx.parent.mkdir(parents=True)
+        npx.write_text(
+            '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" > "$HOME/npx.args"\n'
+        )
+        npx.chmod(0o755)
+        fakebin = home / "bin"
+        fakebin.mkdir()
+        for name in ("bash", "chmod", "dirname", "mkdir", "python3", "readlink"):
+            source = pathlib.Path("/usr/bin") / name
+            if not source.exists():
+                source = pathlib.Path("/bin") / name
+            (fakebin / name).symlink_to(source)
+        env = os.environ.copy()
+        env["HOME"] = str(home)
+        env["PATH"] = str(fakebin)
+        for name in ("NVM_BIN", "MISE_DATA_DIR", "ASDF_DATA_DIR", "HOMEBREW_PREFIX"):
+            env.pop(name, None)
+
+        result = subprocess.run(
+            [str(ROOT / "bin" / "skills-update")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual((home / "npx.args").read_text(), "skills update -g\n")
+
 
 if __name__ == "__main__":
     unittest.main()

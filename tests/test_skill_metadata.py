@@ -503,9 +503,9 @@ class SkillMetadataTest(unittest.TestCase):
 
         text = wrapper.read_text()
 
-        self.assertIn("npx skills update", text)
+        self.assertIn('"$NPX" skills update -g', text)
         self.assertLess(text.index('skill_metadata.py" apply'), text.index('skill_metadata.py" check'))
-        self.assertLess(text.index("npx skills update"), text.index("restore_metadata )"))
+        self.assertLess(text.index('"$NPX" skills update -g'), text.index("restore_metadata )"))
 
     def test_update_wrapper_restores_unlocks_after_fake_npx_update(self) -> None:
         tempdir = tempfile.TemporaryDirectory()

@@ -357,6 +357,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     run_parser.add_argument("--no-push", action="store_true")
     subparsers.add_parser("schedule")
     subparsers.add_parser("install-missing", help="Restore absent catalog entries.")
+    subparsers.add_parser("resolve-npx", help="Print the resolved npx executable.")
     return parser.parse_args(argv)
 
 
@@ -373,6 +374,9 @@ def main(argv: list[str]) -> int:
             return 0
         if args.command == "install-missing":
             install_missing(repo_root())
+            return 0
+        if args.command == "resolve-npx":
+            print(resolve_npx())
             return 0
         if args.command == "run":
             return run(repo_root(), no_update=args.no_update, no_push=args.no_push)

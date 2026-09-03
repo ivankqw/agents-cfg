@@ -28,6 +28,8 @@ for argument in "$@"; do
   esac
 done
 
+NPX="$("$AC/bin/skills-sync" resolve-npx)"
+
 restore_metadata() {
   python3 "$AC/scripts/skill_metadata.py" migrate-ponytail-quarantine "$SHARED_SKILLS" "$DISABLED_SKILLS"
   python3 "$AC/scripts/skill_metadata.py" install-ponytail \
@@ -44,7 +46,7 @@ fi
 npx_rc=0
 if [ "$no_update" = false ] && [ "$restore_only" = false ]; then
   set +e
-  ( cd "$HOME" && npx skills update -g )
+  ( cd "$HOME" && "$NPX" skills update -g )
   npx_rc=$?
   set -e
 fi
