@@ -2,10 +2,10 @@
 name: dogfood-local
 description: >-
   Runs the app on a local server and drives it in a real browser to judge
-  rendered changes before they become pull requests. Use on any change traceable
-  to prose requirements, a stakeholder email, or a mockup, and run it BEFORE the
-  review lanes, not after: hands-on use found three defects that four diff
-  reviews missed, because the wrong code path looked right in the diff. Fires
+  rendered changes before they become pull requests. On any rendered-surface
+  change traceable to prose requirements, a stakeholder email, or a mockup, run
+  it BEFORE the review lanes, not after: hands-on use found three defects that
+  four diff reviews missed, because the wrong code path looked right. Fires
   on a single frontend pass, and equally on a batch frontier of rendered-surface
   branches — dogfood the whole batch from one integration worktree instead of
   shipping a PR per look. Replaces deciding on production.

@@ -124,6 +124,7 @@ to generated Codex instructions because Codex does not support Claude `@imports`
 ## What never goes in this repo
 
 - Credentials of any kind. `mcp/servers.json` holds names and URLs; keys come from the environment.
+  A URL that names a tenant or a person is declared as `url_env` and also comes from the environment.
 - `~/.claude.json`. It mixes machine state with an API key.
 - Anything naming an employer, a host, or a person. That belongs in the private layer at
   `~/agents-cfg-private`.

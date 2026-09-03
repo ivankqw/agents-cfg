@@ -158,7 +158,10 @@ if command -v claude >/dev/null && [ -f "$AC/mcp/servers.json" ]; then
   python3 - "$AC/mcp/servers.json" <<'PY'
 import json,os,subprocess,sys
 for s in json.load(open(sys.argv[1]))["servers"]:
-    name,url = s["name"], s["url"]
+    name = s["name"]
+    url = os.environ.get(s["url_env"]) if "url_env" in s else s["url"]
+    if not url:
+        print(f"  skip {name}: ${s['url_env']} not set"); continue
     env = s.get("header_env")
     if env and not os.environ.get(env):
         print(f"  skip {name}: ${env} not set"); continue

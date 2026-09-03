@@ -4,6 +4,6 @@
     {"name": "context7", "url": "https://mcp.context7.com/mcp", "header_name": "CONTEXT7_API_KEY", "header_env": "CONTEXT7_API_KEY"},
     {"name": "exa", "url": "https://mcp.exa.ai/mcp"},
     {"name": "linear-server", "url": "https://mcp.linear.app/mcp"},
-    {"name": "executor", "url": "https://executor.sh/ivan-koh-s-organization/mcp", "_note": "Executor Cloud: one tool catalogue for every machine and agent. Integrations and credentials live in the hosted account, never here. OAuth on first connect."}
+    {"name": "executor", "url_env": "EXECUTOR_MCP_URL", "_note": "Executor Cloud: one personal tool catalogue for every machine. The URL names your tenant, so it comes from the environment. Credentials live in the hosted account. OAuth on first connect."}
   ]
 }
