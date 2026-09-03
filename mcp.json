@@ -1,0 +1,17 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "context7": {
+      "type": "streamable-http",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "exa": {
+      "type": "streamable-http",
+      "url": "https://mcp.exa.ai/mcp"
+    },
+    "linear-server": {
+      "type": "streamable-http",
+      "url": "https://mcp.linear.app/mcp"
+    }
+  }
+}

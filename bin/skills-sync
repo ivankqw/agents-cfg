@@ -30,7 +30,7 @@ CATALOG_FIELDS = ("source", "sourceType", "sourceUrl", "skillPath")
 
 
 def repo_root() -> pathlib.Path:
-    configured = os.environ.get("AGENTS_CFG_DIR")
+    configured = os.environ.get("IMPSTACK_DIR")
     if configured:
         return pathlib.Path(configured)
     return pathlib.Path(__file__).resolve().parent.parent
@@ -493,7 +493,7 @@ def schedule(root: pathlib.Path) -> None:
     schedule_path = os.pathsep.join(
         dict.fromkeys((str(npx.parent), "/usr/local/bin", "/usr/bin", "/bin"))
     )
-    label = "com.agents-cfg.skills-sync"
+    label = "com.impstack.skills-sync"
     minute = int.from_bytes(
         hashlib.sha256(socket.gethostname().encode()).digest()[:8], "big"
     ) % 60

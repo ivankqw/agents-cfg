@@ -1,4 +1,4 @@
-# Install agents-cfg
+# Install impstack
 
 Use this guide to put the portable layer on a fresh Linux or macOS machine. The bootstrap path pins
 pstack, restores upstream skills, and runs the installer.
@@ -28,20 +28,20 @@ Add the same line to your shell profile if a new terminal loses the setting.
 Run the remote bootstrap for the shortest setup:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ivankqw/agents-cfg/main/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ivankqw/impstack/main/bootstrap.sh | bash
 ```
 
 Use a clone when you want to read the scripts before you run them:
 
 ```bash
-git clone git@github.com:ivankqw/agents-cfg.git ~/agents-cfg
-~/agents-cfg/bootstrap.sh
+git clone git@github.com:ivankqw/impstack.git ~/impstack
+~/impstack/bootstrap.sh
 ```
 
 `bootstrap.sh` refuses unsupported operating systems and missing prerequisites. It refuses a
 pstack checkout with local changes. Fix the reported condition and repeat the command.
 
-The bootstrap script uses `~/agents-cfg` unless `AGENTS_CFG_DIR` names another directory. It clones
+The bootstrap script uses `~/impstack` unless `IMPSTACK_DIR` names another directory. It clones
 the pstack source named by `PSTACK_REPO` and checks out the commit in `pstack-revision.txt`.
 
 ## Add a private layer
@@ -51,7 +51,7 @@ Keep employer and domain instructions in a separate repository. Put that reposit
 
 ```bash
 export PRIVATE_CONFIG="$HOME/path/to/private-agent-config"
-~/agents-cfg/bootstrap.sh
+~/impstack/bootstrap.sh
 ```
 
 `install.sh` reads `AGENTS.md`, `skills/`, and `bin/` from the private layer when those paths exist.
@@ -82,7 +82,7 @@ The expected output is:
 LOADED
 ```
 
-`MISSING` means Claude Code did not load `~/.claude/CLAUDE.md`. Run `~/agents-cfg/install.sh` and
+`MISSING` means Claude Code did not load `~/.claude/CLAUDE.md`. Run `~/impstack/install.sh` and
 repeat the canary.
 
 ## Verify Codex
@@ -90,7 +90,7 @@ repeat the canary.
 Start a new Codex session from `/tmp`. Ask whether its instructions contain `A virtue cannot be
 graded`. Ask for the pstack `bug-fix` model and the `setup-pstack` skill.
 
-Treat a missing phrase, model, or skill as an install failure. Run `~/agents-cfg/install.sh` and read
+Treat a missing phrase, model, or skill as an install failure. Run `~/impstack/install.sh` and read
 its Codex settings report. Merge any missing setting from
 `settings/codex.config.template.toml`, restart Codex, and repeat the check.
 
@@ -120,7 +120,7 @@ Do not use `hermes import-agent claude-code` unless you prove that it preserves 
 Sync the portable layer and upstream skills, then refresh the generated files and links:
 
 ```bash
-cd ~/agents-cfg
+cd ~/impstack
 bin/skills-sync run
 ./install.sh
 ```
@@ -158,7 +158,7 @@ Examine each target with `readlink`:
 readlink <link-path>
 ```
 
-Use `unlink <link-path>` for links that point into `~/agents-cfg`, the private layer, or the pinned
+Use `unlink <link-path>` for links that point into `~/impstack`, the private layer, or the pinned
 pstack checkout. Keep regular files and unrelated links.
 
 Examine `~/.claude/CLAUDE.md` and `~/AGENTS.md`. Remove them if they contain the generated imports or

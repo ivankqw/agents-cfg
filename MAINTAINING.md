@@ -30,7 +30,7 @@ npx skills add <owner>/<repo>
 Then record it, so a fresh machine gets it too. Normalize the CLI lockfile and read the diff:
 
 ```bash
-cd ~/agents-cfg
+cd ~/impstack
 bin/skills-sync normalize
 git diff skills-catalog.json
 ```
@@ -122,6 +122,15 @@ checkout supplies its skills and prompt stubs.
 
 Update `configs/pstack-codex.md` only with confirmed Codex model slugs. The install appends this file
 to generated Codex instructions because Codex does not support Claude `@imports`.
+
+## Maintain the plugin manifests
+
+The root manifests follow the [Agent Plugins 1.0.0 specification](https://github.com/agentplugins/agent-plugins-spec/blob/main/spec/1.0.0.md).
+The portable `mcp.json` mirrors fixed URLs from `mcp/servers.json`. It omits the executor because the
+portable schema does not expand environment variables in remote URLs.
+
+Claude hooks remain settings-wired. The Claude plugin manifest must not declare hooks unless this
+repository adds `hooks/hooks.json`.
 
 ## What never goes in this repo
 

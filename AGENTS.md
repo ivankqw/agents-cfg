@@ -1,4 +1,4 @@
-# agents-cfg agent entry
+# impstack agent entry
 
 This repository installs one portable layer for Claude Code and Codex.
 

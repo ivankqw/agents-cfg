@@ -38,4 +38,4 @@ This repository keeps upstream work connected to its source. `skills-catalog.jso
 - [OpenAI](https://github.com/openai) supplied the adversarial-review material adapted in
   `agents/reviewer.md`. `NOTICE` records the Apache License 2.0 terms for that material.
 
-The agents-cfg repository uses the MIT License. See `LICENSE` for its terms.
+The impstack repository uses the MIT License. See `LICENSE` for its terms.
