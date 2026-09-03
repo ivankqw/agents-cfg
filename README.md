@@ -21,7 +21,7 @@ git clone https://github.com/ivankqw/agents-cfg.git ~/agents-cfg
 
 ## get started
 
-1. [Install the setup and run both canaries](docs/INSTALL.md).
+1. [Install the setup and run the harness canaries](docs/INSTALL.md).
 2. [Choose a model config for the harness that owns the session](configs/README.md).
 3. [Give the agent an issue and choose a pstack workflow](docs/HOW-IT-WORKS.md).
 
@@ -31,12 +31,12 @@ git clone https://github.com/ivankqw/agents-cfg.git ~/agents-cfg
 |---|---|---|---|---|
 | Use a strong base | Harness | Claude Code, Codex; Hermes is experimental `[unverified]` | Flexible | [`configs/`](configs/), [`settings/`](settings/), or the private layer |
 | Keep execution visible | Tracker and execution | Linear | Flexible | [`mcp/servers.json`](mcp/servers.json) and the private layer |
-| Carry one tool catalog | Agent-connection portability | Executor Cloud through MCP | Flexible | [`mcp/servers.json`](mcp/servers.json) |
+| Carry one tool catalog | Agent-connection portability | Executor Cloud through MCP; Claude install today | Flexible | [`mcp/servers.json`](mcp/servers.json) |
 | Keep agents in view | Agent runtime | Herdr | Flexible | Private layer |
 | Load the method on demand | Skills | pstack and Matt Pocock's skills | Flexible, with pinned sources | [`pstack-revision.txt`](pstack-revision.txt) and [`skills-lock.json`](skills-lock.json) |
 | Isolate each checkout | Worktrees | `wt` and treehouse; `pnpm` or `uv` per project | Flexible per project | Private layer |
-| Change the blind spots | Review independence | A different vendor | Fixed rule | [`conventions/AGENTS.md`](conventions/AGENTS.md) and [`configs/`](configs/) |
-| Spend context on defaults | Conventions | Always loaded and under 200 lines `[sourced: MAINTAINING.md]` | Fixed rule | [`conventions/AGENTS.md`](conventions/AGENTS.md) and [`install.sh`](install.sh) |
+| Change the blind spots | Review independence | Different vendor first; different model fallback | Fixed independence rule | [`conventions/AGENTS.md`](conventions/AGENTS.md) and [`configs/`](configs/) |
+| Spend context on defaults | Conventions | Always loaded `[unverified]` and under 200 lines `[sourced: MAINTAINING.md]` | Fixed rule | [`conventions/AGENTS.md`](conventions/AGENTS.md) and [`install.sh`](install.sh) |
 
 ```mermaid
 flowchart TB

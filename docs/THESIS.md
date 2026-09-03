@@ -69,7 +69,7 @@ From my side, the harness should stay thin. Claude Code and Codex should own the
 management, memory, tools, permissions, and hooks. Their teams can test those mechanisms across
 more environments than I can. My wrapper would give me another runtime and a worse test set.
 
-My layer adds little runtime code. `bin/delegate` routes review work, and two hooks add advice. The
+My layer adds little runtime code. `bin/delegate` routes review work, and hooks add advice. The
 skills get fat because they carry the procedure, stopping rules, evidence
 standard, and field-shot examples from work that went wrong.
 
