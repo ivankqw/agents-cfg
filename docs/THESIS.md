@@ -1,4 +1,4 @@
-# I overfit coding agents to myself
+# impstack, imperfect operator.
 
 ## The analogy
 
@@ -40,24 +40,27 @@ quadrantChart
 I assume harness teams evaluate across many users and repositories. I can accept less
 generalisation because my target distribution is one operator, me.
 
-## Thin harness, fat skills
+## Method cards on the factory floor
 
 ```mermaid
 flowchart BT
-    subgraph TH[Thin harness]
-        direction LR
-        LO[Loop] --- ME[Memory] --- HK[Hooks] --- PE[Permissions]
+    subgraph FF[Factory floor]
+        direction BT
+        subgraph TH[Thin harness]
+            direction LR
+            LO[Loop] --- ME[Memory] --- HK[Hooks] --- PE[Permissions]
+        end
+        subgraph MC[Skills: method cards]
+            direction LR
+            PR[Procedures] --- ST[Failure stories] --- ER[Evidence rules]
+        end
+        TH --> MC --> OP[Operator]
     end
-    subgraph FS[Fat skills]
-        direction LR
-        PR[Procedures] --- ST[Failure stories] --- ER[Evidence rules]
-    end
-    TH --> FS --> OP[Operator]
 ```
 
 Garry Tan calls this
 ["thin harness, fat skills"](https://github.com/garrytan/gbrain/blob/master/docs/ethos/THIN_HARNESS_FAT_SKILLS.md).
-The split lets harness teams improve the machinery while I keep control of my method.
+I treat skills as method cards on the factory floor, not the factory.
 
 ## The correction loop
 

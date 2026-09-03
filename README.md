@@ -1,16 +1,12 @@
-# agents-cfg
+# impstack
 
-**I built this for one operator, me.** This repository keeps my working method for Claude Code and
-Codex in files I can read, review, and carry between machines. If some of it fits you, take it and
-change the rest.
+impstack, imperfect operator.
 
-**My bet is thin harness, fat skills.** If you squint, the harness and its model look like a base
-model. The machine-learning language is an analogy. I keep the weights frozen and overfit the
-context to my work while the harness teams optimise for general use.
+**This is my opinionated blueprint for a personal code factory.** I connect its order book,
+workstations, review lanes, release, and retro in one line.
 
-**I need to stay in the thinking loop.** Agents move fast, and accepting each plausible edit is the
-easy path. The conventions, checks, and independent review lanes make me examine the work while the
-tooling handles the repetition.
+**I am the imperfect part it is designed around.** I add hand-off points and explanation gates where
+speed tempts me to accept work that I have stopped following.
 
 ## install
 
@@ -25,33 +21,40 @@ git clone https://github.com/ivankqw/agents-cfg.git ~/agents-cfg
 2. [Choose a model config for the harness that owns the session](configs/README.md).
 3. [Give the agent an issue and choose a pstack workflow](docs/HOW-IT-WORKS.md).
 
-## the stack
-
-| principle | layer | tool | fixed or flexible | where configured |
-|---|---|---|---|---|
-| Use a strong base | Harness | Claude Code, Codex; Hermes is experimental `[unverified]` | Flexible | [`configs/`](configs/), [`settings/`](settings/), or the private layer |
-| Keep execution visible | Tracker and execution | Linear | Flexible | [`mcp/servers.json`](mcp/servers.json) and the private layer |
-| Carry one tool catalog | Agent-connection portability | Executor Cloud through MCP | Flexible | [`mcp/servers.json`](mcp/servers.json) |
-| Keep agents in view | Agent runtime | Herdr | Flexible | Private layer |
-| Load the method on demand | Skills | pstack and Matt Pocock's skills | Flexible, with pinned sources | [`pstack-revision.txt`](pstack-revision.txt) and [`bootstrap.sh`](bootstrap.sh) |
-| Isolate each checkout | Worktrees | `wt` and treehouse; `pnpm` or `uv` per project | Flexible per project | Private layer |
-| Change the blind spots | Review independence | Different vendor first; different model fallback | Fixed independence rule | [`conventions/AGENTS.md`](conventions/AGENTS.md) and [`configs/`](configs/) |
-| Spend context on defaults | Conventions | Always loaded `[unverified]` and under 200 lines `[sourced: MAINTAINING.md]` | Fixed rule | [`conventions/AGENTS.md`](conventions/AGENTS.md) and [`install.sh`](install.sh) |
+## the factory floor
 
 ```mermaid
-flowchart TB
-    O[Operator] --> P[Portable layer]
-    P --> C[Conventions]
-    P --> S[Skills]
-    P --> A[Agents and configs]
-    P --> H[Hooks and MCP declarations]
-    C --> B[Harness and model]
-    S --> B
-    A --> B
-    H --> B
-    R[Private layer] --> B
-    B --> W[Work]
+flowchart LR
+    LI["Linear<br/>order book<br/>issues and maps"] --> HE["Herdr<br/>the floor<br/>Codex lanes in panes"]
+    HE --> WT["Worktree pool<br/>workstations<br/>wt + treehouse<br/>seeded and torn down"]
+    WT --> DL
+    WT --> SL
+    subgraph QA["QA: two review lanes"]
+        direction TB
+        DL["Fresh Sonnet<br/>default defects lane"]
+        SL["Standards and spec lane"]
+    end
+    DL --> MR["Merge and release<br/>operator tags"]
+    SL --> MR
+    MR --> RE["backpass / reflect<br/>retro<br/>transcript findings<br/>operator-gated convention and skill edits"]
+    RE --> OP["Operator<br/>hand-off point<br/>explanation gates<br/>planned"]
+    HA["Harness<br/>Claude Code or Codex<br/>Hermes experimental"] -. runs .-> HE
+    EX["Executor<br/>agent-connection catalogue"] -. supplies tools .-> HE
+    SK["Skills<br/>method cards<br/>pstack + Matt Pocock"] -. guide .-> HE
 ```
+
+| principle | station | tool | fixed or flexible | where configured |
+|---|---|---|---|---|
+| Start from an order | Order book | Linear issues and maps | Fixed | [`mcp/servers.json`](mcp/servers.json) and the private layer |
+| Keep implementation visible | Factory floor | Herdr with Codex lanes in panes | Fixed | Private layer |
+| Isolate each checkout | Workstations | Worktree pool with `wt` and treehouse, seeded and torn down | Fixed | Private layer |
+| Change the blind spots | QA | Fresh Sonnet default defects lane and standards/spec lane | Fixed | [`conventions/AGENTS.md`](conventions/AGENTS.md) and [`configs/`](configs/) |
+| Keep release judgment human | Merge and release | Operator tags | Fixed | Private layer |
+| Feed corrections back | Retro | backpass and `reflect` surface transcript findings for operator-gated convention and skill edits | Fixed | [`conventions/AGENTS.md`](conventions/AGENTS.md), [`pstack-revision.txt`](pstack-revision.txt), and the private layer |
+| Return control at junctions | Hand-off point | Operator explanation gates, planned | Fixed | Private layer |
+| Choose the runtime per environment | Supporting layer: harness | Claude Code or Codex; Hermes is experimental `[unverified]` | Flexible | [`configs/`](configs/), [`settings/`](settings/), and the private layer |
+| Carry one tool catalogue | Supporting layer: agent connections | Executor Cloud through MCP | Fixed | [`mcp/servers.json`](mcp/servers.json) |
+| Load the method when needed | Supporting layer: skills | pstack and Matt Pocock's skills | Fixed | [`pstack-revision.txt`](pstack-revision.txt), [`bootstrap.sh`](bootstrap.sh), and [`skills-catalog.json`](skills-catalog.json) |
 
 ## usage
 
@@ -61,6 +64,8 @@ I run these from my full machine setup. The portable bootstrap does not install 
 ```text
 herdr agent prompt codex "Take this lane's issue brief. Use the implement skill, then open a draft PR." --wait
 ```
+
+I run the standards lane from Claude Code.
 
 ```text
 /code-review origin/main
