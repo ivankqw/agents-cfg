@@ -6,3 +6,6 @@ auth.json
 *.p8
 *.pem
 settings.local.json
+__pycache__/
+*.py[cod]
+skills-lock.json

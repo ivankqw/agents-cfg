@@ -1,0 +1,379 @@
+#!/usr/bin/env python3
+"""Keep third-party skills consistent across machines.
+
+Commands:
+  normalize  Write skills-catalog.json from the skills CLI lockfile.
+  run        Pull, restore, update, normalize, validate, commit, and push.
+  check      Validate the catalog against installed skills without writes.
+  schedule   Print a macOS launchd plist and Linux 09:00 daily crontab line.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import pathlib
+import platform
+import shlex
+import shutil
+import socket
+import subprocess
+import sys
+from typing import Any
+from xml.sax.saxutils import escape
+
+CATALOG_FIELDS = ("source", "sourceType", "sourceUrl", "skillPath")
+
+
+def repo_root() -> pathlib.Path:
+    configured = os.environ.get("AGENTS_CFG_DIR")
+    if configured:
+        return pathlib.Path(configured)
+    return pathlib.Path(__file__).resolve().parent.parent
+
+
+def live_lock_path() -> pathlib.Path:
+    configured = os.environ.get("SKILLS_LOCK_FILE")
+    if configured:
+        path = pathlib.Path(configured)
+        if path.is_file():
+            return path
+        raise FileNotFoundError(f"configured skills CLI lockfile not found at {path}")
+    home = pathlib.Path.home()
+    primary = home / ".agents" / ".skill-lock.json"
+    if primary.is_file():
+        return primary
+    fallback = home / "skills-lock.json"
+    if fallback.is_file():
+        return fallback
+    raise FileNotFoundError(f"skills CLI lockfile not found at {primary} or {fallback}")
+
+
+def load_json(path: pathlib.Path) -> Any:
+    try:
+        return json.loads(path.read_text())
+    except json.JSONDecodeError as error:
+        raise ValueError(f"invalid JSON in {path}: {error}") from error
+
+
+def normalized_catalog(lock: object) -> dict[str, object]:
+    if not isinstance(lock, dict) or not isinstance(lock.get("skills"), dict):
+        raise ValueError("live lockfile must contain a skills object")
+    raw_skills = lock["skills"]
+    if not all(
+        isinstance(name, str) and isinstance(entry, dict)
+        for name, entry in raw_skills.items()
+    ):
+        raise ValueError("live lockfile contains an invalid skill entry")
+    skills: dict[str, dict[str, str]] = {}
+    for name in sorted(raw_skills):
+        entry = raw_skills[name]
+        missing = [
+            field
+            for field in CATALOG_FIELDS
+            if not isinstance(entry.get(field), str) or not entry[field]
+        ]
+        if missing:
+            raise ValueError(f"live lock entry {name} is missing: {', '.join(missing)}")
+        skills[name] = {field: entry[field] for field in CATALOG_FIELDS}
+    return {"skills": skills}
+
+
+def catalog_text(lock: object) -> str:
+    return json.dumps(normalized_catalog(lock), indent=2) + "\n"
+
+
+def normalize(root: pathlib.Path) -> None:
+    catalog = root / "skills-catalog.json"
+    content = catalog_text(load_json(live_lock_path()))
+    if catalog.is_file() and catalog.read_text() == content:
+        print("catalog unchanged")
+        return
+    catalog.write_text(content)
+    print(f"catalog wrote {catalog}")
+
+
+def shared_skills_root() -> pathlib.Path:
+    configured = os.environ.get("SHARED_SKILLS")
+    if configured:
+        return pathlib.Path(configured)
+    return pathlib.Path.home() / ".agents" / "skills"
+
+
+def load_catalog(root: pathlib.Path) -> dict[str, dict[str, str]]:
+    path = root / "skills-catalog.json"
+    catalog = load_json(path)
+    if not isinstance(catalog, dict) or set(catalog) != {"skills"}:
+        raise ValueError(f"broken catalog: {path} must contain only a skills object")
+    raw_skills = catalog["skills"]
+    if not isinstance(raw_skills, dict):
+        raise ValueError(f"broken catalog: skills must be an object in {path}")
+
+    skills: dict[str, dict[str, str]] = {}
+    if tuple(raw_skills) != tuple(sorted(raw_skills)):
+        raise ValueError("broken catalog: skill names are not sorted")
+    for name, entry in raw_skills.items():
+        valid = (
+            isinstance(name, str)
+            and isinstance(entry, dict)
+            and tuple(entry) == CATALOG_FIELDS
+            and all(
+                isinstance(entry[field], str) and entry[field]
+                for field in CATALOG_FIELDS
+            )
+        )
+        if not valid:
+            raise ValueError(f"broken catalog entry: {name}")
+        skills[name] = entry
+    return skills
+
+
+def validation_problems(root: pathlib.Path, shared: pathlib.Path) -> list[str]:
+    catalog = load_catalog(root)
+    problems: list[str] = []
+    for name in sorted(catalog):
+        skill_dir = shared / name
+        if not skill_dir.is_dir():
+            problems.append(f"missing catalog skill: {name}")
+        elif not (skill_dir / "SKILL.md").is_file():
+            problems.append(f"catalog skill has no SKILL.md: {name}")
+
+    if not shared.is_dir():
+        problems.append(f"missing shared skills directory: {shared}")
+        return problems
+    for entry in sorted(shared.iterdir(), key=lambda path: path.name):
+        if entry.is_symlink() or not entry.is_dir():
+            continue
+        if not (entry / "SKILL.md").is_file():
+            problems.append(f"installed skill folder has no SKILL.md: {entry.name}")
+        elif entry.name not in catalog:
+            problems.append(f"uncatalogued installed skill: {entry.name}")
+    return problems
+
+
+def check(root: pathlib.Path) -> int:
+    problems = validation_problems(root, shared_skills_root())
+    if problems:
+        for problem in problems:
+            print(problem)
+        return 1
+    count = len(load_catalog(root))
+    print(f"catalog valid: {count} skills")
+    return 0
+
+
+def resolve_npx() -> pathlib.Path:
+    from_path = shutil.which("npx")
+    if from_path:
+        return pathlib.Path(from_path)
+
+    home = pathlib.Path.home()
+    candidates: list[pathlib.Path] = []
+    nvm_bin = os.environ.get("NVM_BIN")
+    if nvm_bin:
+        candidates.append(pathlib.Path(nvm_bin) / "npx")
+    candidates.extend(
+        sorted((home / ".nvm" / "versions" / "node").glob("*/bin/npx"), reverse=True)
+    )
+    mise_data = pathlib.Path(
+        os.environ.get("MISE_DATA_DIR", home / ".local/share/mise")
+    )
+    candidates.extend(
+        sorted((mise_data / "installs" / "node").glob("*/bin/npx"), reverse=True)
+    )
+    asdf_data = pathlib.Path(os.environ.get("ASDF_DATA_DIR", home / ".asdf"))
+    candidates.extend(
+        sorted((asdf_data / "installs" / "nodejs").glob("*/bin/npx"), reverse=True)
+    )
+    candidates.append(home / ".bun" / "bin" / "npx")
+    brew_prefix = os.environ.get("HOMEBREW_PREFIX")
+    if brew_prefix:
+        candidates.append(pathlib.Path(brew_prefix) / "bin" / "npx")
+    elif platform.system() == "Darwin":
+        candidates.extend(
+            (pathlib.Path("/opt/homebrew/bin/npx"), pathlib.Path("/usr/local/bin/npx"))
+        )
+
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    raise FileNotFoundError(
+        "npx not found; checked PATH, nvm, mise, asdf, Bun, and Homebrew locations"
+    )
+
+
+def command_env(npx: pathlib.Path) -> dict[str, str]:
+    env = os.environ.copy()
+    current_path = env.get("PATH", "")
+    env["PATH"] = os.pathsep.join(
+        part
+        for part in dict.fromkeys((str(npx.parent), *current_path.split(os.pathsep)))
+        if part
+    )
+    return env
+
+
+def run_command(
+    description: str,
+    command: list[str],
+    *,
+    cwd: pathlib.Path,
+    env: dict[str, str],
+) -> None:
+    print(description, flush=True)
+    subprocess.run(command, cwd=cwd, env=env, check=True)
+
+
+def install_missing(root: pathlib.Path) -> None:
+    shared = shared_skills_root()
+    shared.mkdir(mode=0o700, parents=True, exist_ok=True)
+    shared.chmod(0o700)
+    catalog = load_catalog(root)
+    npx = resolve_npx()
+    env = command_env(npx)
+    for name, entry in catalog.items():
+        if (shared / name / "SKILL.md").is_file():
+            continue
+        run_command(
+            f"install missing skill: {name} from {entry['source']}",
+            [str(npx), "skills", "add", entry["source"], "-g", "-y"],
+            cwd=pathlib.Path.home(),
+            env=env,
+        )
+
+
+def run(root: pathlib.Path, *, no_update: bool, no_push: bool) -> int:
+    npx = resolve_npx()
+    env = command_env(npx)
+    run_command(
+        "git pull --ff-only",
+        ["git", "-C", str(root), "pull", "--ff-only"],
+        cwd=root,
+        env=env,
+    )
+    catalog_path = root / "skills-catalog.json"
+    original = catalog_path.read_bytes() if catalog_path.is_file() else None
+    update_command = [str(root / "bin" / "skills-update")]
+    if no_update:
+        update_command.append("--no-update")
+    run_command("sync installed skills", update_command, cwd=root, env=env)
+    normalize(root)
+    if check(root) != 0:
+        return 1
+
+    current = catalog_path.read_bytes()
+    if original == current:
+        print("catalog unchanged; no commit")
+        return 0
+    run_command(
+        "git add skills-catalog.json",
+        ["git", "-C", str(root), "add", "skills-catalog.json"],
+        cwd=root,
+        env=env,
+    )
+    message = f"chore(skills): sync from {socket.gethostname()}"
+    run_command(
+        f"git commit: {message}",
+        ["git", "-C", str(root), "commit", "-m", message],
+        cwd=root,
+        env=env,
+    )
+    if no_push:
+        print("push skipped: --no-push")
+        return 0
+    run_command(
+        "git push",
+        ["git", "-C", str(root), "push"],
+        cwd=root,
+        env=env,
+    )
+    return 0
+
+
+def schedule(root: pathlib.Path) -> None:
+    npx = resolve_npx()
+    script = (root / "bin" / "skills-sync").resolve()
+    schedule_path = os.pathsep.join(
+        dict.fromkeys((str(npx.parent), "/usr/local/bin", "/usr/bin", "/bin"))
+    )
+    label = "com.agents-cfg.skills-sync"
+    print("macOS launchd plist:")
+    print(
+        "\n".join(
+            (
+                '<?xml version="1.0" encoding="UTF-8"?>',
+                '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
+                '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+                '<plist version="1.0">',
+                "<dict>",
+                "  <key>Label</key>",
+                f"  <string>{label}</string>",
+                "  <key>ProgramArguments</key>",
+                "  <array>",
+                f"    <string>{escape(str(script))}</string>",
+                "    <string>run</string>",
+                "  </array>",
+                "  <key>EnvironmentVariables</key>",
+                "  <dict>",
+                "    <key>PATH</key>",
+                f"    <string>{escape(schedule_path)}</string>",
+                "  </dict>",
+                "  <key>StartCalendarInterval</key>",
+                "  <dict>",
+                "    <key>Hour</key>",
+                "    <integer>9</integer>",
+                "    <key>Minute</key>",
+                "    <integer>0</integer>",
+                "  </dict>",
+                "</dict>",
+                "</plist>",
+            )
+        )
+    )
+    print("Linux crontab:")
+    print(f"0 9 * * * PATH={shlex.quote(schedule_path)} {shlex.quote(str(script))} run")
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("normalize")
+    subparsers.add_parser("check")
+    run_parser = subparsers.add_parser("run")
+    run_parser.add_argument("--no-update", action="store_true")
+    run_parser.add_argument("--no-push", action="store_true")
+    subparsers.add_parser("schedule")
+    subparsers.add_parser("install-missing", help="Restore absent catalog entries.")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    try:
+        if args.command == "normalize":
+            normalize(repo_root())
+            return 0
+        if args.command == "check":
+            return check(repo_root())
+        if args.command == "schedule":
+            schedule(repo_root())
+            return 0
+        if args.command == "install-missing":
+            install_missing(repo_root())
+            return 0
+        if args.command == "run":
+            return run(repo_root(), no_update=args.no_update, no_push=args.no_push)
+        raise NotImplementedError(f"{args.command} is not implemented")
+    except (
+        FileNotFoundError,
+        OSError,
+        subprocess.CalledProcessError,
+        ValueError,
+    ) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
