@@ -1,8 +1,13 @@
 # agents-cfg
 
-I treat Claude Code or Codex with its model as a base model. I overfit the context to my work
-with conventions, skills, agents, configs, and hooks. The harness stays thin. The skills carry the
-procedures, examples, and failure stories that make the agent work the way I work.
+If you squint, Claude Code or Codex with its model looks like a base model. I keep the weights frozen
+and pile my own context on top. The machine-learning language is an analogy. It captures why I keep
+conventions, skills, agents, configs, and hooks in one place. I am trying to overfit the agent
+to one operator, me.
+
+The harness stays thin, and the skills get fat. They carry the procedures, field-shot examples, and
+failure stories that teach an agent how I work at inference time. The harness teams can optimise
+for general use. I can accept the maintenance cost of fitting the context to myself.
 
 ```mermaid
 flowchart TB

@@ -1,163 +1,178 @@
 # I overfit coding agents to myself
 
-I use Claude Code and Codex for work that spans design, implementation, review, and release. Both
-harnesses arrive with strong models and sensible defaults. Their teams need those defaults to serve
-many developers, repositories, and risk profiles. I need one agent system to fit one operator.
+I keep coming back to a machine-learning metaphor for how I use Claude Code and Codex. If you
+squint, the harness and its model look like a base model. I pile conventions, skills, agent
+definitions, configs, hooks, and private context on top. The weights stay frozen, yet the agent I
+work with starts to fit me.
 
-That difference drives this repository. I treat the harness and model as a base model. I add a
-portable layer of conventions, skills, agent definitions, configs, and hooks. The weights stay
-frozen. The context changes the behavior.
+I know the analogy has holes. A harness plus a model differs from a base model, and a directory full
+of Markdown does not train weights. I borrow the vocabulary because it helps me think about the
+system. The model brings broad capability. The harness runs the loop. I use my context to teach that
+pair how I want to work at inference time.
 
-I think of the result as personal fine-tuning in context. Machine-learning teams fine-tune weights
-against a target distribution. I keep the weights and train the working context against my own
-distribution of tasks. I choose the overfit.
+My guess is that the future may or may not follow this shape. Context might remain the place where
+each operator teaches an agent their method. I am building on that premise while harness teams and
+models keep changing.
 
-## Harness teams optimize for general use
+## The harness teams have a generalisation problem
 
-A harness team has to serve users who disagree about good work. One user wants an agent to stop at a
-plan. Another wants the agent to open a pull request. One team requires a human before each external
-write. Another grants an agent a queue for the night. A shared product must handle all of them.
+Claude Code and Codex have teams whose job differs from mine. They need to serve many developers,
+repositories, and risk profiles. One developer wants an agent to stop after a plan. Another wants a
+pull request before breakfast. One company requires approval before an external write. Another lets
+an agent work through a queue overnight.
 
-Harness teams run evaluations across broad task sets. They look for performance that survives a new
-repository, a new user, and a new model release. That is the classic machine-learning trade-off
-between performance on a target distribution and generalization across other distributions.
+Those teams have to balance performance with generalisable behaviour. I assume they run evaluations
+across broad task sets, then tune the model and harness so gains survive a new user or repository.
+That is the machine-learning problem. A system can fit its test distribution and fail once
+the distribution moves.
 
-The trade-off makes sense for a product team. A default that wins on one person's habits and fails
-for everyone else is a poor product default. The team should resist personal quirks in the base
+Their product should resist my quirks. A default built around my habits would make a bad shared
+default. The team has to spend its effort on safe loop behaviour, sound context management, useful
+tools, and permissions that hold across many environments.
+
+I have a smaller target distribution. I care about my repositories, my review standards, and my
+handoffs. I can spend context on details that do not belong in a shared default. In machine-learning
+language, I want to overfit the system to one operator. I mean
+the useful kind of overfitting, closer to a personal fine-tune than a model memorising noise.
+
+## I put my weights in context
+
+The fine-tuning analogy helps me decide where knowledge belongs. A convention acts like a weight
+with a high activation rate because each session reads it. A skill holds a larger block of context
+behind a narrow trigger. An agent definition gives one role a stance. A config chooses the model
+that fills that role.
+
+I can read and review those choices. `conventions/AGENTS.md` holds rules for each session. `skills/`
+holds task procedures. `agents/reviewer.md` gives review an adversarial posture. `configs/` records
+which model does each job.
+
+No training job changes the model parameters. A session reads a set of files and behaves in ways
+that another session with the same model family may not. I call that difference in-context learning,
+and I push it toward the operator because two operators can want opposite things from the same
 model.
 
-I have the opposite objective. I know the repositories, review standards, and failure patterns that
-matter to me. I can spend context on those details. I can accept lower generalization because I do
-not sell this configuration to a broad market.
+I split the context into portable and private layers. The portable layer holds my method and can
+follow me to another job. The private layer holds employer names, hosts, credentials, and domain
+knowledge. `install.sh` combines both on my machine while Git keeps them apart. My review habits can
+travel without carrying a tenant URL or customer name.
 
-The base model gives me broad capability. My portable layer gives that capability a local shape.
-
-## My weights live in context
-
-The analogy to fine-tuning has limits, but it helps me decide where to put knowledge. A convention
-acts like a weight with a high activation rate. Each session receives it. A skill acts like a larger
-block of weights behind a task trigger. An agent definition narrows a role. A config chooses which
-model fills that role.
-
-I make those choices in files that I can read and review. `conventions/AGENTS.md` holds the rules I
-want in each session. `skills/` holds procedures for work such as shipping, browser use, and tracker
-cleanup. `agents/reviewer.md` gives review a separate stance. `configs/` records model choices by
-role.
-
-The model reads those files at inference time. No training job changes its parameters. A new session
-receives a different context and produces different behavior from the same model family.
-
-That mechanism gives me a tight correction loop. A failed session leaves evidence. I can turn a
-repeated failure into a convention or a skill example. The next session reads the correction. Kun
-Chen's [backpass](https://github.com/kunchenguid/backpass) gives this loop a useful machine-learning
-frame. His tool treats an agent session as a forward pass and the transcript as a loss signal.
-
-I keep a human gate. A transcript can expose a gap, but it cannot decide which habit I want.
-The operator owns that choice.
+I use the setup to borrow judgment without pretending I invented it. `skills-lock.json` records
+skill sources. `pstack-revision.txt` pins the pstack port. I can examine an update, keep the parts
+that fit, and credit the author.
 
 ## Thin harness, fat skills
 
-Garry Tan named the architecture
+Garry Tan calls this architecture
 ["thin harness, fat skills"](https://github.com/garrytan/gbrain/blob/master/docs/ethos/THIN_HARNESS_FAT_SKILLS.md).
-His phrase describes the direction I want.
 
-The harness should own the work loop, context management, memory, tools, permissions, and hooks. I
-do not want to rebuild those mechanisms in a personal wrapper. Claude Code and Codex teams can test
-them across more users and environments than I can.
+From my side, the harness should stay thin. Claude Code and Codex should own the work loop, context
+management, memory, tools, permissions, and hooks. Their teams can test those mechanisms across
+more environments than I can. My wrapper would give me another runtime and a worse test set.
 
-I keep the harness thin from my point of view. I add little runtime code. `bin/delegate` routes
-review work. Two hooks add advice at events. The rest of the portable layer consists of text and
-small declarations.
+My layer adds little runtime code. `bin/delegate` routes review work, and two hooks add advice. The
+skills get fat because they carry the procedure, stopping rules, evidence
+standard, and field-shot examples from work that went wrong.
 
-The skills carry more context. A fat skill includes the procedure, the stopping rules, the evidence
-standard, and stories from past failures. The stories matter because a bare command leaves room for
-the same bad shortcut. A concrete failure tells the model which tempting interpretation caused harm.
+The examples do more work than a bare command. "Test the UI" leaves room for an agent to use a stale
+branch or declare success after reading a proxy. A failure story shows the tempting shortcut and its
+consequence. The next agent receives something closer to a training example than a policy slogan.
 
-`skills/dogfood-local/SKILL.md` gives one example. The skill says when to run a local application,
-how to build an integration workspace, and what to measure in a browser. It records cases where
-a stale branch or missing environment file created a false diagnosis. A short instruction such as
-"test the UI" would lose those distinctions.
+`skills/dogfood-local/SKILL.md` says when to run a local app and what to measure in the browser. It
+records cases where stale branches and missing environment files produced false diagnoses.
+`skills/ship/SKILL.md` covers the route from framing through a draft pull request, with failure cases
+around test status, branch drift, and handoffs. Those details would swamp the convention file.
 
-`skills/ship/SKILL.md` carries a longer route from framing to a draft pull request. It records failure
-patterns around background tasks, test status, stale branches, and human handoffs. Those details
-would overload the convention file. They earn their place when the agent ships work.
+If you squint again, progressive disclosure looks like sparse activation. The normal context sees
+a short skill description, and a matching task loads the heavy procedure. Each session avoids the
+cost of the whole library.
 
-The split resembles progressive disclosure. The model sees a short skill description in its normal
-context. The model loads the full procedure when the task matches. I can add depth without charging
-every session for it.
+## Failure stories become training data
 
-## The context should belong to the operator
-
-Two people can use the same base model and want different behavior. One person wants terse status
-updates. Another wants a detailed decision trail. One person accepts same-vendor review. Another
-requires model independence before a push.
-
-Harness teams cannot settle those differences with one default. They can expose the controls and
-test that the controls work. The operator should supply the working method.
-
-This repository makes my method portable. The portable layer contains rules that can travel between
-jobs. The private layer contains employer names, host details, credentials, and domain knowledge.
-`install.sh` combines the layers on my machine while Git keeps them apart.
-
-That boundary matters as much as the content. A personal method should survive a new job. Private
-facts should stay with the job that owns them. The same agent system can carry my review habits
-without carrying a tenant URL or customer name.
-
-The skill boundary lets me consume other people's judgment without claiming it as mine.
-`skills-lock.json` records source data for skills installed by the CLI. `pstack-revision.txt` pins
-the pstack port, and `install.sh` links that checkout. I can update those sources, inspect the
-change, and retain the author's credit.
-
-## Failure stories are training data
-
-Rules sound obvious after someone states them. Their value appears when the model meets an easy
+Many rules sound obvious once I write them down. They earn their place when an agent finds the same
 shortcut under pressure.
 
-My conventions say that a number needs a measurement and a source. That rule grew from summaries
-that turned estimates into facts. The same file says to read a helper definition before its call
-site. A plausible function name can hide a wrong assumption through a syntax check.
+My conventions require a measurement and a source for a number. I wrote that rule after summaries
+turned estimates into facts. The same file tells an agent to read a helper before its call site. A
+plausible function name once hid false assumptions behind a clean syntax check. I need the next
+session to avoid the failure I have seen.
 
-The reviewer rule came from another class of failure. A model can review its own work with a stern
-prompt and keep the same blind spot. I assign the reviewer role to another model when I can. When I
-cannot cross the vendor boundary, I use another model and require executed evidence. The rule lives
-in `conventions/AGENTS.md`, while `configs/` makes the model choice visible.
+The reviewer rule came from another repeated failure. A model can attack its own diff and retain the
+blind spot that wrote the code. I use another model for review when I can. If I cannot cross a vendor
+boundary, I use a different model with no shared context and ask for executed evidence.
 
-The hooks cover a different weakness. A model can forget to load a skill. A configured hook fires on
-an event even when the model makes no routing decision. `hooks/review_reminder.py` adds review advice
-before a push. `hooks/cleanup_crew_after_pr.py` adds tracker advice after a pull request opens.
+Hooks cover cases where the model forgets to route itself. `hooks/review_reminder.py` adds review
+advice before a push. `hooks/cleanup_crew_after_pr.py` adds tracker advice after a pull request
+opens. A hook fires from an event, so it does not depend on the model remembering that a skill
+exists.
 
-I do not read these examples as proof that my setup beats every default. They show that my failures
-repeat. Repeated failures give me material for a local training set.
+Kun Chen's [backpass](https://github.com/kunchenguid/backpass) gave this correction loop a
+machine-learning frame. Backpass treats an agent session as a forward pass and the transcript as a
+loss signal. I keep a human gate in that picture. I can find a gap in a transcript. I use that gap
+to decide whether the correction describes a habit I want or an instruction that would make the
+system worse.
 
-## The cost is real
+## Staying in the thinking loop is hard
 
-Fat skills consume context when they load. Long rules can conflict. A stale anecdote can train the
-wrong behavior. An upstream update can change a trigger. A generated instruction file can fall out
-of date.
+Agents work fast enough that I can fall out of the thinking loop while the work looks
+productive. Things go wrong, the diff keeps growing, and accepting each edit becomes the easy
+path. The agent has no trouble producing one more plausible edit. I have to keep enough of the
+problem in my head to know whether that edit belongs.
 
-I manage those costs with limits and checks. The convention file stays under its line ceiling.
-Skills use narrow descriptions. The installer checks metadata and pinned revisions. The canary in
-`docs/INSTALL.md` asks each harness to reveal whether it loaded the expected phrase.
+The files in this repository help, but they do not remove that burden. They can make an agent show
+evidence, stop at a boundary, or call for another reviewer. They cannot supply my judgment. If I
+approve each step because the output looks polished, I have turned the setup into an elaborate way
+to automate my own inattention.
 
-The setup costs maintenance time. I have to remove stale rules, review upstream changes, and
-keep the private layer separate. I accept that work because I spend more time operating agents than
-maintaining these files. Another operator may reach a different balance.
+I want the system to help me stay in the loop without making me the slowest part of each action.
+That means short status updates, checks I can rerun, diffs that tell a coherent story, and explicit
+human gates where the consequence deserves one. I need to use pstack's proof checks more. They are
+one attempt to turn "I think this worked" into an artifact I can examine.
 
-## The field may absorb this layer
+## The cost can outrun the gain
 
-My bet could fail. Harness teams may build strong personal memory, procedure learning, role routing,
-and review isolation into their products. Models may infer an operator's method from a small history
-without a fat skill layer. Context costs may make large procedures a poor bargain.
+Fat skills consume context when they load. Long rules can conflict. An old anecdote can teach the
+wrong behaviour after the code changes. An upstream update can alter a trigger. A generated
+instruction file can drift away from its source.
 
-I would change my view if the harness could reproduce my working method after I removed this
-portable layer. I would test repeated tasks that depend on my review rules, evidence format, and
-private boundary. Equal behavior and equal failure rates across those tasks would remove the case
-for this repository.
+I put limits and checks around those costs. The convention file has a line ceiling. Skills use
+narrow descriptions. The installer checks metadata and pinned revisions. The canary in
+`docs/INSTALL.md` asks each harness to reveal whether it loaded an expected phrase. None of that
+makes the layer free.
 
-I would change my view if the skills became the main source of errors. A rise in instruction
-conflicts, missed triggers, or stale procedures would show that the context layer costs more than it
-returns.
+I remove stale rules, review upstream changes, and keep private facts out of the portable
+repository. I accept the bill because I spend more time operating agents than maintaining these
+files. Another operator may get less value from the same trade.
 
-I bet on a thin personal wrapper around a strong base model and a fat set of skills that I own or
-pin. Harness teams can optimize the common system. I can optimize the context for one
-operator. The model stays general, while the work becomes mine.
+The context can become the main source of error. More instructions create more chances for a
+conflict, a missed trigger, or a procedure that survived past its use. I do not want a museum of
+every lesson I have learned. I want a working set that earns its context cost.
+
+## I have a falsifier
+
+Harness teams may make this repository unnecessary. They may build strong personal memory,
+procedure learning, role routing, and review isolation into their products. Models may infer my
+method from a small history. Context prices may make heavy skills a poor bargain.
+
+I would change my view if a harness reproduced my working method after I removed the portable
+layer. I would test tasks that depend on my review rules, evidence format, private boundary, and
+handoff style. If the bare harness matched the configured system's behaviour and failure rate, I
+would have no case for this repository.
+
+I would change my view if the skills caused more errors than they prevented. I can watch for
+instruction conflicts, missed triggers, stale procedures, and time spent nursing the setup. A rise
+in those costs would tell me that my in-context fine-tune had overfit the wrong things.
+
+## The next experiment is an imperfection stack
+
+I may call the next experiment `impstack`, short for imperfection stack. The name is another
+metaphor. I want to embrace the humanness of the operator instead of designing as if a perfect human
+will supervise a perfect agent.
+
+I have not tested this idea. My guess is that an imperfection stack would record where my
+attention fails. I want it to catch the moments when I accept an agent's work before I understand
+it. A verification step might give me a useful grip on those moments. The tools might take shape
+around those limits instead of assuming perfect attention.
+
+For now, I am betting on a thin personal wrapper around strong models and fat skills that I own or
+pin. The harness teams can work on generalisation. I can tune the context for one person. The model
+keeps its frozen weights, while the analogy gives me a way to train the context around them.
