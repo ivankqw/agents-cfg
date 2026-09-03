@@ -237,7 +237,16 @@ def install_missing(root: pathlib.Path) -> None:
             continue
         run_command(
             f"install missing skill: {name} from {entry['source']}",
-            [str(npx), "skills", "add", entry["source"], "-g", "-y"],
+            [
+                str(npx),
+                "skills",
+                "add",
+                entry["source"],
+                "--skill",
+                name,
+                "-g",
+                "-y",
+            ],
             cwd=pathlib.Path.home(),
             env=env,
         )

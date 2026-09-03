@@ -269,7 +269,8 @@ class SkillsSyncTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual(
-            (home / "npx.args").read_text(), "skills add example/alpha -g -y\n"
+            (home / "npx.args").read_text(),
+            "skills add example/alpha --skill alpha -g -y\n",
         )
         self.assertTrue((home / ".agents" / "skills" / "alpha" / "SKILL.md").is_file())
 
