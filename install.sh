@@ -102,7 +102,7 @@ for name in ("claude", "codex", "opencode"):
         print(name)
 PY
 )
-if [ "${#detected_harnesses[@]}" -eq 0 ]; then
+if [ "${detected_harnesses[0]+present}" != present ]; then
   if [ "$NO_HARNESS" = true ]; then
     echo "  detected harnesses: none (--no-harness)"
   else
@@ -255,7 +255,12 @@ link "$AC/configs/pstack-codex.md" "$CODEX_DIR/pstack-models.md"
 
 install_step_mcp_servers() {
 if [ -f "$AC/mcp/servers.json" ]; then
-  python3 - "$AC/mcp/servers.json" "${detected_harnesses[@]}" <<'PY'
+  local -a mcp_args
+  mcp_args=("$AC/mcp/servers.json")
+  if [ "${detected_harnesses[0]+present}" = present ]; then
+    mcp_args+=("${detected_harnesses[@]}")
+  fi
+  python3 - "${mcp_args[@]}" <<'PY'
 import json, os, subprocess, sys
 
 failed = False

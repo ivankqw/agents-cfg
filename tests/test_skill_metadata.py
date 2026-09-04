@@ -452,6 +452,26 @@ class SkillMetadataTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("missing harness", result.stderr)
 
+    def test_no_harness_mcp_step_avoids_empty_array_expansion(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            _, env = self.create_valid_install_fixture(root)
+            for harness in ("claude", "codex"):
+                (root / "bin" / harness).unlink()
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "--no-harness", "mcp"],
+                cwd=ROOT, env=env, text=True, capture_output=True, check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            install = (ROOT / "install.sh").read_text()
+            self.assertNotIn('${#detected_harnesses[@]}', install)
+            self.assertNotIn(
+                'python3 - "$AC/mcp/servers.json" "${detected_harnesses[@]}"',
+                install,
+            )
+
     def test_mcp_reports_genuine_registration_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)
