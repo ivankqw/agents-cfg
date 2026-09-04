@@ -145,16 +145,22 @@ EXPECTED_INSTALL_STEPS = (
 )
 
 EXPECTED_INSTALL_BANNERS = {
-    "preflight": (),
-    "skills": ("skills",),
-    "skill-triggers": ("constraining explicit-use third-party skill triggers",),
-    "skill-unlock": ("unlocking skills listed in skills-unlock.txt",),
-    "agents-hooks": ("agents / hooks",),
-    "bin": ("bin",),
-    "instructions": ("instruction files",),
-    "mcp": ("mcp servers (keys from env; nothing secret is stored in this repo)",),
-    "codex-settings": ("Codex settings",),
-    "validate": ("validating third-party skill catalog",),
+    "preflight": ("preflight",),
+    "skills": ("preflight", "skills"),
+    "skill-triggers": (
+        "preflight",
+        "constraining explicit-use third-party skill triggers",
+    ),
+    "skill-unlock": ("preflight", "unlocking skills listed in skills-unlock.txt"),
+    "agents-hooks": ("preflight", "agents / hooks"),
+    "bin": ("preflight", "bin"),
+    "instructions": ("preflight", "instruction files"),
+    "mcp": (
+        "preflight",
+        "mcp servers (keys from env; nothing secret is stored in this repo)",
+    ),
+    "codex-settings": ("preflight", "Codex settings"),
+    "validate": ("preflight", "validating third-party skill catalog"),
 }
 
 
@@ -968,7 +974,8 @@ class SkillMetadataTest(unittest.TestCase):
             self.assertEqual(original_result.returncode, 0, original_result.stderr)
             self.assertEqual(new_result.returncode, 0, new_result.stderr)
             self.assertEqual(
-                self.normalize_home(original_result.stdout, original_home),
+                b"== preflight\n"
+                + self.normalize_home(original_result.stdout, original_home),
                 self.normalize_home(new_result.stdout, new_home),
             )
             self.assertEqual(
@@ -992,6 +999,18 @@ class SkillMetadataTest(unittest.TestCase):
         self.assertEqual(result.stderr, "")
         self.assertEqual(tuple(result.stdout.splitlines()), EXPECTED_INSTALL_STEPS)
 
+    def test_install_help_says_named_steps_run_preflight_first(self) -> None:
+        result = subprocess.run(
+            [str(ROOT / "install.sh"), "--help"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("A single step always runs preflight first.", result.stdout)
+
     def test_each_install_step_runs_alone_in_a_fresh_home(self) -> None:
         for step in EXPECTED_INSTALL_STEPS:
             with self.subTest(step=step), tempfile.TemporaryDirectory() as temp:
@@ -1014,6 +1033,55 @@ class SkillMetadataTest(unittest.TestCase):
                     ),
                     EXPECTED_INSTALL_BANNERS[step],
                 )
+
+    def test_install_skill_unlock_fails_when_every_requested_skill_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            home, env = self.create_valid_install_fixture(root)
+            unlock_names = tuple(
+                line
+                for line in (ROOT / "skills-unlock.txt").read_text().splitlines()
+                if line and not line.startswith("#")
+            )
+            for name in unlock_names:
+                shutil.rmtree(home / ".agents" / "skills" / name)
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "skill-unlock"],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("run the skills step first", result.stderr + result.stdout)
+
+    def test_install_skill_unlock_warns_when_some_requested_skills_are_missing(self) -> None:
+        for missing_names in (
+            ("wayfinder",),
+            ("wayfinder", "grill-with-docs"),
+        ):
+            with self.subTest(missing_names=missing_names):
+                with tempfile.TemporaryDirectory() as temp:
+                    root = pathlib.Path(temp)
+                    home, env = self.create_valid_install_fixture(root)
+                    for name in missing_names:
+                        shutil.rmtree(home / ".agents" / "skills" / name)
+
+                    result = subprocess.run(
+                        [str(ROOT / "install.sh"), "skill-unlock"],
+                        cwd=ROOT,
+                        env=env,
+                        text=True,
+                        capture_output=True,
+                        check=False,
+                    )
+
+                    self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+                    for name in missing_names:
+                        self.assertIn(f"skip {name}: not installed", result.stdout)
 
     def test_install_rejects_unknown_step_and_prints_valid_names(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

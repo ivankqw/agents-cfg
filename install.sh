@@ -7,7 +7,7 @@
 set -euo pipefail
 
 INSTALL_STEP_REGISTRY=(
-  'preflight||install_step_preflight'
+  'preflight|== preflight|install_step_preflight'
   'skills|== skills|install_step_skills'
   'skill-triggers|== constraining explicit-use third-party skill triggers|install_step_constraining'
   'skill-unlock|== unlocking skills listed in skills-unlock.txt|install_step_unlocking'
@@ -27,8 +27,24 @@ list_install_steps() {
   done
 }
 
-selected_function=""
-selected_banner=""
+print_install_help() {
+  echo "usage: ./install.sh [--list|--help|<step>]"
+  echo
+  echo "A single step always runs preflight first."
+  echo
+  echo "Valid steps:"
+  list_install_steps
+}
+
+run_install_step() {
+  local entry name banner function_name
+  entry="$1"
+  IFS='|' read -r name banner function_name <<< "$entry"
+  echo "$banner"
+  "$function_name"
+}
+
+selected_entry=""
 if [ "$#" -gt 1 ]; then
   list_install_steps >&2
   exit 2
@@ -38,15 +54,18 @@ if [ "$#" -eq 1 ]; then
     list_install_steps
     exit 0
   fi
+  if [ "$1" = "--help" ]; then
+    print_install_help
+    exit 0
+  fi
   for entry in "${INSTALL_STEP_REGISTRY[@]}"; do
     IFS='|' read -r name banner function_name <<< "$entry"
     if [ "$name" = "$1" ]; then
-      selected_function="$function_name"
-      selected_banner="$banner"
+      selected_entry="$entry"
       break
     fi
   done
-  if [ -z "$selected_function" ]; then
+  if [ -z "$selected_entry" ]; then
     echo "unknown install step: $1" >&2
     list_install_steps >&2
     exit 2
@@ -178,6 +197,7 @@ elif [ -e "$STALE_DELEGATE" ]; then
 fi
 for f in "$AC"/bin/*;        do link "$f" "$BIN/$(basename "$f")"; done
 [ -d "$PRIVATE/bin" ] && for f in "$PRIVATE"/bin/*; do link "$f" "$BIN/$(basename "$f")"; done
+# A false private-bin test returns non-zero; keep the function successful under set -e.
 :
 }
 
@@ -355,19 +375,12 @@ install_step_validating_catalog() {
 
 if [ "$#" -eq 0 ]; then
   for entry in "${INSTALL_STEP_REGISTRY[@]}"; do
-    IFS='|' read -r name banner function_name <<< "$entry"
-    if [ -n "$banner" ]; then
-      echo "$banner"
-    fi
-    "$function_name"
+    run_install_step "$entry"
   done
   echo "== done. Merge the settings templates by hand."
 else
-  if [ "$selected_function" != "install_step_preflight" ]; then
-    install_step_preflight
+  if [ "$1" != "preflight" ]; then
+    run_install_step "${INSTALL_STEP_REGISTRY[0]}"
   fi
-  if [ -n "$selected_banner" ]; then
-    echo "$selected_banner"
-  fi
-  "$selected_function"
+  run_install_step "$selected_entry"
 fi

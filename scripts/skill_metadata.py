@@ -183,10 +183,12 @@ def unlock_skills(unlock_file: pathlib.Path, root: pathlib.Path) -> list[str]:
         if line.strip() and not line.startswith("#")
     ]
     results: list[str] = []
+    missing = 0
     for name in names:
         path = skill_file(root, name)
         if not path.exists():
             results.append(f"skip {name}: not installed")
+            missing += 1
             continue
         original = path.read_text()
         updated = re.sub(
@@ -201,6 +203,8 @@ def unlock_skills(unlock_file: pathlib.Path, root: pathlib.Path) -> list[str]:
             continue
         path.write_text(updated)
         results.append(f"{name}: unlocked")
+    if names and missing == len(names):
+        raise RuntimeError("no requested skills are installed; run the skills step first")
     return results
 
 
