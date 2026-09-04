@@ -135,7 +135,18 @@ Use `bin/skills-sync run --no-update` to restore and normalize without updating 
 
 Run `bin/skills-sync schedule` to print a daily macOS `launchd` definition and a Linux `cron` line.
 The command derives the minute from the hostname and includes the resolved `npx` directory in
-`PATH`.
+`PATH`. It also records the resolved skill directory and lock file.
+
+The skill state paths use this precedence:
+
+1. Use `SHARED_SKILLS` for the skill directory when it is set.
+2. Otherwise, use `$HOME/.agents/skills`.
+3. Use `SKILLS_LOCK_FILE` for the lock file when it is set.
+4. Otherwise, use `$XDG_STATE_HOME/skills/.skill-lock.json` when `XDG_STATE_HOME` is set.
+5. Otherwise, use `$HOME/.agents/.skill-lock.json`.
+
+The installer exports both resolved paths to update commands. Generated schedules record the same
+paths. The old `$HOME/skills-lock.json` fallback is not part of this contract.
 
 Run the Claude Code and Codex verification checks after an update. Repeat the Hermes canary if you
 use the experimental setup.

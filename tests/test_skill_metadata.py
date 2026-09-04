@@ -451,6 +451,26 @@ class SkillMetadataTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("error context7 for Claude: configuration write failed", result.stderr)
 
+    def test_install_propagates_explicit_skill_state_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            _, env = self.create_valid_install_fixture(root)
+            shared = root / "custom-state" / "skills"
+            lock = root / "custom-state" / "lock.json"
+            shared.mkdir(parents=True)
+            self.populate_imported_skills(shared)
+            env["SHARED_SKILLS"] = str(shared)
+            env["SKILLS_LOCK_FILE"] = str(lock)
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "skills"], cwd=ROOT, env=env,
+                text=True, capture_output=True, check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            self.assertTrue((shared / "architect").is_symlink())
+            self.assertFalse((pathlib.Path(env["HOME"]) / ".agents/skills/architect").is_symlink())
+
     @staticmethod
     def normalize_home(value: str | bytes, home: pathlib.Path) -> str | bytes:
         if isinstance(value, bytes):
@@ -729,7 +749,7 @@ class SkillMetadataTest(unittest.TestCase):
         env["IMPSTACK_DIR"] = str(ROOT)
 
         result = subprocess.run(
-            [str(ROOT / "bootstrap.sh")],
+            [str(ROOT / "bootstrap.sh"), "--no-harness"],
             cwd=ROOT,
             env=env,
             text=True,
@@ -762,7 +782,7 @@ class SkillMetadataTest(unittest.TestCase):
         env["IMPSTACK_DIR"] = str(checkout)
 
         result = subprocess.run(
-            [str(ROOT / "bootstrap.sh")],
+            [str(ROOT / "bootstrap.sh"), "--no-harness"],
             cwd=ROOT,
             env=env,
             text=True,
@@ -806,7 +826,7 @@ class SkillMetadataTest(unittest.TestCase):
         env["IMPSTACK_DIR"] = str(ROOT)
 
         result = subprocess.run(
-            [str(ROOT / "bootstrap.sh")],
+            [str(ROOT / "bootstrap.sh"), "--no-harness"],
             cwd=ROOT,
             env=env,
             text=True,
@@ -976,7 +996,7 @@ class SkillMetadataTest(unittest.TestCase):
         env = self.base_runtime_env(home, fakebin)
 
         result = subprocess.run(
-            [str(ROOT / "install.sh")],
+            [str(ROOT / "install.sh"), "--no-harness"],
             cwd=ROOT,
             env=env,
             text=True,

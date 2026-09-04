@@ -23,6 +23,7 @@ import shutil
 import socket
 import subprocess
 import sys
+from dataclasses import dataclass
 from typing import Any
 from xml.sax.saxutils import escape
 
@@ -36,27 +37,30 @@ def repo_root() -> pathlib.Path:
     return pathlib.Path(__file__).resolve().parent.parent
 
 
-def live_lock_path() -> pathlib.Path:
-    configured = os.environ.get("SKILLS_LOCK_FILE")
-    if configured:
-        path = pathlib.Path(configured)
-        if path.is_file():
-            return path
-        raise FileNotFoundError(f"configured skills CLI lockfile not found at {path}")
-    xdg_state_home = os.environ.get("XDG_STATE_HOME")
-    if xdg_state_home:
-        path = pathlib.Path(xdg_state_home) / "skills" / ".skill-lock.json"
-        if path.is_file():
-            return path
-        raise FileNotFoundError(f"skills CLI lockfile not found at {path}")
+@dataclass(frozen=True)
+class SkillStatePaths:
+    shared: pathlib.Path
+    lock: pathlib.Path
+
+
+def skill_state_paths() -> SkillStatePaths:
     home = pathlib.Path.home()
-    primary = home / ".agents" / ".skill-lock.json"
-    if primary.is_file():
-        return primary
-    fallback = home / "skills-lock.json"
-    if fallback.is_file():
-        return fallback
-    raise FileNotFoundError(f"skills CLI lockfile not found at {primary} or {fallback}")
+    shared = pathlib.Path(os.environ.get("SHARED_SKILLS", home / ".agents" / "skills"))
+    configured_lock = os.environ.get("SKILLS_LOCK_FILE")
+    if configured_lock:
+        lock = pathlib.Path(configured_lock)
+    elif xdg := os.environ.get("XDG_STATE_HOME"):
+        lock = pathlib.Path(xdg) / "skills" / ".skill-lock.json"
+    else:
+        lock = home / ".agents" / ".skill-lock.json"
+    return SkillStatePaths(shared=shared, lock=lock)
+
+
+def live_lock_path() -> pathlib.Path:
+    path = skill_state_paths().lock
+    if path.is_file():
+        return path
+    raise FileNotFoundError(f"skills CLI lockfile not found at {path}")
 
 
 def load_json(path: pathlib.Path) -> Any:
@@ -133,10 +137,35 @@ def normalize(root: pathlib.Path, *, allow_removals: bool = False) -> None:
 
 
 def shared_skills_root() -> pathlib.Path:
-    configured = os.environ.get("SHARED_SKILLS")
-    if configured:
-        return pathlib.Path(configured)
-    return pathlib.Path.home() / ".agents" / "skills"
+    return skill_state_paths().shared
+
+
+def _ensure_cli_alias(native: pathlib.Path, resolved: pathlib.Path) -> None:
+    if native.resolve(strict=False) == resolved.resolve(strict=False):
+        return
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    native.parent.mkdir(parents=True, exist_ok=True)
+    if native.is_symlink() and native.resolve(strict=False) == resolved.resolve(strict=False):
+        return
+    if native.exists() or native.is_symlink():
+        raise ValueError(
+            f"skills CLI path {native} does not match resolved path {resolved}"
+        )
+    native.symlink_to(resolved, target_is_directory=resolved.is_dir())
+
+
+def prepare_cli_state() -> None:
+    state = skill_state_paths()
+    state.shared.mkdir(mode=0o700, parents=True, exist_ok=True)
+    state.lock.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    home = pathlib.Path.home()
+    _ensure_cli_alias(home / ".agents" / "skills", state.shared)
+    native_lock = (
+        pathlib.Path(os.environ["XDG_STATE_HOME"]) / "skills" / ".skill-lock.json"
+        if os.environ.get("XDG_STATE_HOME")
+        else home / ".agents" / ".skill-lock.json"
+    )
+    _ensure_cli_alias(native_lock, state.lock)
 
 
 def load_catalog(root: pathlib.Path) -> dict[str, dict[str, str]]:
@@ -269,11 +298,14 @@ def resolve_npx() -> pathlib.Path:
 
 
 def command_env(npx: pathlib.Path) -> dict[str, str]:
+    node = resolve_node_tool("node")
     env = os.environ.copy()
     current_path = env.get("PATH", "")
     env["PATH"] = os.pathsep.join(
         part
-        for part in dict.fromkeys((str(npx.parent), *current_path.split(os.pathsep)))
+        for part in dict.fromkeys(
+            (str(npx.parent), str(node.parent), *current_path.split(os.pathsep))
+        )
         if part
     )
     return env
@@ -412,12 +444,14 @@ def install_missing(root: pathlib.Path) -> int:
     shared.mkdir(mode=0o700, parents=True, exist_ok=True)
     shared.chmod(0o700)
     catalog = load_catalog(root)
+    missing = [(name, entry) for name, entry in catalog.items() if not (shared / name / "SKILL.md").is_file()]
+    if not missing:
+        return 0
+    prepare_cli_state()
     npx = resolve_npx()
     env = command_env(npx)
     failures: list[str] = []
-    for name, entry in catalog.items():
-        if (shared / name / "SKILL.md").is_file():
-            continue
+    for name, entry in missing:
         try:
             run_command(
                 f"install missing skill: {name} from {entry['source']}",
@@ -502,11 +536,23 @@ def run(root: pathlib.Path, *, no_update: bool, no_push: bool) -> int:
 
 def schedule(root: pathlib.Path) -> None:
     npx = resolve_npx()
+    node = resolve_node_tool("node")
     script = (root / "bin" / "skills-sync").resolve()
     schedule_path = os.pathsep.join(
-        dict.fromkeys((str(npx.parent), "/usr/local/bin", "/usr/bin", "/bin"))
+        dict.fromkeys(
+            (str(npx.parent), str(node.parent), "/usr/local/bin", "/usr/bin", "/bin")
+        )
     )
     label = "com.impstack.skills-sync"
+    state = skill_state_paths()
+    schedule_environment = {
+        "PATH": schedule_path,
+        "HOME": str(pathlib.Path.home()),
+        "SHARED_SKILLS": str(state.shared),
+        "SKILLS_LOCK_FILE": str(state.lock),
+    }
+    if xdg := os.environ.get("XDG_STATE_HOME"):
+        schedule_environment["XDG_STATE_HOME"] = xdg
     minute = int.from_bytes(
         hashlib.sha256(socket.gethostname().encode()).digest()[:8], "big"
     ) % 60
@@ -528,8 +574,11 @@ def schedule(root: pathlib.Path) -> None:
                 "  </array>",
                 "  <key>EnvironmentVariables</key>",
                 "  <dict>",
-                "    <key>PATH</key>",
-                f"    <string>{escape(schedule_path)}</string>",
+                *(
+                    line
+                    for key, value in schedule_environment.items()
+                    for line in (f"    <key>{key}</key>", f"    <string>{escape(value)}</string>")
+                ),
                 "  </dict>",
                 "  <key>StartCalendarInterval</key>",
                 "  <dict>",
@@ -545,7 +594,9 @@ def schedule(root: pathlib.Path) -> None:
     )
     print("Linux crontab:")
     print(
-        f"{minute} 9 * * * PATH={shlex.quote(schedule_path)} "
+        f"{minute} 9 * * * "
+        + " ".join(f"{key}={shlex.quote(value)}" for key, value in schedule_environment.items())
+        + " "
         f"{shlex.quote(str(script))} run"
     )
 
@@ -563,6 +614,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     subparsers.add_parser("install-missing", help="Restore absent catalog entries.")
     subparsers.add_parser("resolve-npx", help="Print the resolved npx executable.")
     subparsers.add_parser("resolve-node", help="Print the resolved node executable.")
+    subparsers.add_parser("resolve-shared", help="Print the shared skills directory.")
+    subparsers.add_parser("resolve-lock", help="Print the skills CLI lock file.")
+    subparsers.add_parser("runtime-path", help="Print PATH with the Node runtime.")
+    subparsers.add_parser("prepare-state", help="Align native skills CLI paths.")
     return parser.parse_args(argv)
 
 
@@ -584,6 +639,18 @@ def main(argv: list[str]) -> int:
             return 0
         if args.command == "resolve-node":
             print(resolve_node_tool("node"))
+            return 0
+        if args.command == "resolve-shared":
+            print(skill_state_paths().shared)
+            return 0
+        if args.command == "resolve-lock":
+            print(skill_state_paths().lock)
+            return 0
+        if args.command == "runtime-path":
+            print(command_env(resolve_npx())["PATH"])
+            return 0
+        if args.command == "prepare-state":
+            prepare_cli_state()
             return 0
         if args.command == "run":
             return run(repo_root(), no_update=args.no_update, no_push=args.no_push)

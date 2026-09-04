@@ -671,6 +671,9 @@ class SkillsSyncTests(unittest.TestCase):
             candidate.parent.mkdir(parents=True, exist_ok=True)
             candidate.write_text("#!/bin/sh\n")
             candidate.chmod(0o755)
+            node = candidate.with_name("node")
+            node.write_text("#!/bin/sh\n")
+            node.chmod(0o755)
 
         overrides = {
             "NVM_BIN": str(nvm_bin.parent),
@@ -692,6 +695,7 @@ class SkillsSyncTests(unittest.TestCase):
                     scheduled_path.split(os.pathsep)[0], str(expected.parent)
                 )
             expected.unlink()
+            expected.with_name("node").unlink()
             if index == 1:
                 overrides.pop("NVM_BIN")
 
@@ -699,6 +703,8 @@ class SkillsSyncTests(unittest.TestCase):
         linuxbrew.parent.mkdir(parents=True)
         linuxbrew.write_text("#!/bin/sh\n")
         linuxbrew.chmod(0o755)
+        linuxbrew.with_name("node").write_text("#!/bin/sh\n")
+        linuxbrew.with_name("node").chmod(0o755)
         result = self.run_cli(repo, home, "schedule", path=str(path_bin))
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
@@ -714,6 +720,8 @@ class SkillsSyncTests(unittest.TestCase):
         npx.parent.mkdir(parents=True)
         npx.write_text("#!/bin/sh\n")
         npx.chmod(0o755)
+        npx.with_name("node").write_text("#!/bin/sh\n")
+        npx.with_name("node").chmod(0o755)
         expected = int.from_bytes(
             hashlib.sha256(socket.gethostname().encode()).digest()[:8], "big"
         ) % 60
@@ -779,6 +787,8 @@ class SkillsSyncTests(unittest.TestCase):
             '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" > "$HOME/npx.args"\n'
         )
         npx.chmod(0o755)
+        npx.with_name("node").write_text("#!/bin/sh\n")
+        npx.with_name("node").chmod(0o755)
         fakebin = home / "bin"
         fakebin.mkdir()
         for name in ("bash", "chmod", "dirname", "mkdir", "python3", "readlink"):

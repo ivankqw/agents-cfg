@@ -107,7 +107,9 @@ fi
 PRIVATE="${PRIVATE_CONFIG:-$HOME/agents-cfg-private}"
 CLAUDE_DIR="$HOME/.claude"
 CODEX_DIR="$HOME/.codex"
-SHARED_SKILLS="$HOME/.agents/skills"
+SHARED_SKILLS="$("$AC/bin/skills-sync" resolve-shared)"
+SKILLS_LOCK_FILE="$("$AC/bin/skills-sync" resolve-lock)"
+export SHARED_SKILLS SKILLS_LOCK_FILE
 PSTACK_DIR="${PSTACK_DIR:-$HOME/.local/share/agent-plugins/pstack-claude}"
 BIN="$HOME/.local/bin"
 

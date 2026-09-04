@@ -29,6 +29,9 @@ else
 fi
 
 PSTACK_REVISION="$(sed -n '1p' "$DEST/pstack-revision.txt")"
+SHARED_SKILLS="$("$DEST/bin/skills-sync" resolve-shared)"
+SKILLS_LOCK_FILE="$("$DEST/bin/skills-sync" resolve-lock)"
+export SHARED_SKILLS SKILLS_LOCK_FILE
 if ! printf '%s\n' "$PSTACK_REVISION" | grep -Eq '^[0-9a-f]{40}$'; then
   echo "invalid pstack revision in $DEST/pstack-revision.txt" >&2
   exit 1
@@ -75,8 +78,8 @@ if [ "$install_rc" -ne 0 ]; then
   exit "$install_rc"
 fi
 if ! python3 "$DEST/scripts/skill_metadata.py" require-skill-name \
-  "$HOME/.agents/skills/herdr/SKILL.md" herdr; then
-  echo "Herdr restore failed: invalid $HOME/.agents/skills/herdr/SKILL.md" >&2
+  "$SHARED_SKILLS/herdr/SKILL.md" herdr; then
+  echo "Herdr restore failed: invalid $SHARED_SKILLS/herdr/SKILL.md" >&2
   exit 1
 fi
 

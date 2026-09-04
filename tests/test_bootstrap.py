@@ -39,6 +39,8 @@ class BootstrapMigrationTests(unittest.TestCase):
         legacy.mkdir()
         (legacy / ".git").mkdir()
         (legacy / "pstack-revision.txt").write_text("0" * 40 + "\n")
+        (legacy / "bin").mkdir()
+        (legacy / "bin" / "skills-sync").symlink_to(ROOT / "bin" / "skills-sync")
         installer = legacy / "install.sh"
         installer.write_text(
             "#!/usr/bin/env bash\n"
@@ -99,6 +101,8 @@ class BootstrapMigrationTests(unittest.TestCase):
         new.mkdir()
         (new / ".git").mkdir()
         (new / "pstack-revision.txt").write_text("0" * 40 + "\n")
+        (new / "bin").mkdir()
+        (new / "bin" / "skills-sync").symlink_to(ROOT / "bin" / "skills-sync")
         installer = new / "install.sh"
         installer.write_text("#!/usr/bin/env bash\nexit 0\n")
         installer.chmod(0o755)
@@ -140,6 +144,8 @@ class BootstrapMigrationTests(unittest.TestCase):
         custom.mkdir()
         (custom / ".git").mkdir()
         (custom / "pstack-revision.txt").write_text("0" * 40 + "\n")
+        (custom / "bin").mkdir()
+        (custom / "bin" / "skills-sync").symlink_to(ROOT / "bin" / "skills-sync")
         installer = custom / "install.sh"
         installer.write_text("#!/usr/bin/env bash\nexit 0\n")
         installer.chmod(0o755)
