@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import hashlib
+import json
 import os
 import pathlib
 import re
@@ -13,12 +14,12 @@ import sys
 import tempfile
 from dataclasses import dataclass
 
-MARKER = re.compile(rb"^<!-- impstack-managed: instructions sha256=([0-9a-f]{64}) -->\n")
 MAX_BACKUPS = 5
 
 
 @dataclass(frozen=True)
 class Plan:
+    key: str
     path: pathlib.Path
     desired: bytes
     action: str
@@ -30,21 +31,37 @@ def rendered(body: bytes) -> bytes:
     return f"<!-- impstack-managed: instructions sha256={digest} -->\n".encode() + body
 
 
-def classify(path: pathlib.Path, desired: bytes, legacy: bytes) -> Plan:
+def file_digest(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def classify(key: str, path: pathlib.Path, desired: bytes, legacy: bytes, recorded: str | None) -> Plan:
     if not path.exists():
-        return Plan(path, desired, "replace", None)
+        return Plan(key, path, desired, "replace", None)
     existing = path.read_bytes()
-    if existing == desired:
-        return Plan(path, desired, "noop", existing)
-    match = MARKER.match(existing)
-    if match:
-        body = existing[match.end():]
-        if hashlib.sha256(body).hexdigest().encode() == match.group(1):
-            return Plan(path, desired, "replace", existing)
-        return Plan(path, desired, "conflict", existing)
+    if recorded == file_digest(existing):
+        action = "noop" if existing == desired else "replace"
+        return Plan(key, path, desired, action, existing)
     if existing == legacy:
-        return Plan(path, desired, "replace", existing)
-    return Plan(path, desired, "conflict", existing)
+        return Plan(key, path, desired, "replace", existing)
+    return Plan(key, path, desired, "conflict", existing)
+
+
+def load_state(path: pathlib.Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    raw = json.loads(path.read_text())
+    if raw.get("version") != 1 or not isinstance(raw.get("targets"), dict):
+        raise ValueError(f"invalid instruction state: {path}")
+    targets = raw["targets"]
+    if not all(isinstance(key, str) and re.fullmatch(r"[0-9a-f]{64}", value) for key, value in targets.items()):
+        raise ValueError(f"invalid instruction state: {path}")
+    return targets
+
+
+def write_state(path: pathlib.Path, targets: dict[str, str]) -> None:
+    content = json.dumps({"version": 1, "targets": dict(sorted(targets.items()))}, indent=2) + "\n"
+    replace(path, content.encode())
 
 
 def backup(path: pathlib.Path, content: bytes) -> pathlib.Path:
@@ -90,6 +107,9 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--private", type=pathlib.Path, required=True)
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
+    state_root = pathlib.Path(os.environ.get("XDG_STATE_HOME", args.home / ".local/state"))
+    state_path = state_root.expanduser().resolve() / "impstack" / "instructions.json"
+    recorded = load_state(state_path)
 
     private_exists = (args.private / "AGENTS.md").is_file()
     claude_body = b"@AGENTS.portable.md\n" + (b"@AGENTS.private.md\n" if private_exists else b"")
@@ -104,8 +124,20 @@ def main(argv: list[str]) -> int:
     )
 
     plans = (
-        classify(args.home / ".claude/CLAUDE.md", rendered(claude_body), claude_body),
-        classify(args.home / "AGENTS.md", rendered(codex_body), old_codex),
+        classify(
+            ".claude/CLAUDE.md",
+            args.home / ".claude/CLAUDE.md",
+            rendered(claude_body),
+            claude_body,
+            recorded.get(".claude/CLAUDE.md"),
+        ),
+        classify(
+            "AGENTS.md",
+            args.home / "AGENTS.md",
+            rendered(codex_body),
+            old_codex,
+            recorded.get("AGENTS.md"),
+        ),
     )
     conflicts = [plan for plan in plans if plan.action == "conflict"]
     for plan in conflicts:
@@ -120,6 +152,8 @@ def main(argv: list[str]) -> int:
         if plan.action != "noop":
             replace(plan.path, plan.desired)
             print(f"managed: {plan.path}")
+        recorded[plan.key] = file_digest(plan.desired)
+    write_state(state_path, recorded)
     return 0
 
 

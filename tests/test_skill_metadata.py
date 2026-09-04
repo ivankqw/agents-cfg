@@ -528,6 +528,28 @@ class SkillMetadataTest(unittest.TestCase):
             self.assertIn("--- existing:", result.stdout)
             self.assertIn("use --force", result.stderr)
 
+    def test_instruction_step_rejects_an_unrecorded_forged_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            home, env = self.create_valid_install_fixture(root)
+            target = home / "AGENTS.md"
+            body = b"operator-owned instructions\n"
+            digest = hashlib.sha256(body).hexdigest()
+            forged = f"<!-- impstack-managed: instructions sha256={digest} -->\n".encode() + body
+            target.write_bytes(forged)
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "instructions"], cwd=ROOT, env=env,
+                text=True, capture_output=True, check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(target.read_bytes(), forged)
+            backups = tuple(home.glob("AGENTS.md.impstack-backup.*"))
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(backups[0].read_bytes(), forged)
+            self.assertFalse((home / ".local/state/impstack/instructions.json").exists())
+
     def test_instruction_step_is_a_checked_noop_and_force_keeps_backup(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)
@@ -1204,7 +1226,13 @@ class SkillMetadataTest(unittest.TestCase):
             )
             original_snapshot = self.snapshot_home(original_home)
             new_snapshot = self.snapshot_home(new_home)
-            managed = {".claude/CLAUDE.md", "AGENTS.md"}
+            managed = {
+                ".claude/CLAUDE.md",
+                "AGENTS.md",
+                ".local/state",
+                ".local/state/impstack",
+                ".local/state/impstack/instructions.json",
+            }
             self.assertEqual(
                 {key: value for key, value in original_snapshot.items() if key not in managed},
                 {key: value for key, value in new_snapshot.items() if key not in managed},
