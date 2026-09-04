@@ -760,6 +760,36 @@ class SkillsSyncTests(unittest.TestCase):
         self.assertIn(str(expected_shared), schedule.stdout)
         self.assertIn(str(expected_lock), schedule.stdout)
 
+    def test_relative_xdg_state_home_uses_one_resolved_path(self) -> None:
+        _, home = self.make_home()
+        repo = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(repo))
+        fakebin = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(fakebin))
+        for name in ("node", "npx"):
+            executable = fakebin / name
+            executable.write_text("#!/bin/sh\n")
+            executable.chmod(0o755)
+        expected_xdg = (repo / "relative-state").resolve()
+        overrides = {
+            "XDG_STATE_HOME": "relative-state",
+            "SKILLS_LOCK_FILE": "relative-config/lock.json",
+        }
+        expected_lock = (repo / "relative-config/lock.json").resolve()
+
+        lock = self.run_cli(repo, home, "resolve-lock", path=str(fakebin), env_overrides=overrides)
+        schedule = self.run_cli(repo, home, "schedule", path=str(fakebin), env_overrides=overrides)
+        prepared = self.run_cli(repo, home, "prepare-state", path=str(fakebin), env_overrides=overrides)
+
+        self.assertEqual(lock.stdout.strip(), str(expected_lock))
+        self.assertEqual(prepared.returncode, 0, prepared.stderr)
+        self.assertIn(f"XDG_STATE_HOME={expected_xdg}", schedule.stdout)
+        self.assertNotIn("XDG_STATE_HOME=relative-state", schedule.stdout)
+        self.assertEqual(
+            (expected_xdg / "skills/.skill-lock.json").resolve(strict=False),
+            expected_lock,
+        )
+
     def test_node_resolution_sorts_manager_versions_numerically(self) -> None:
         _, home = self.make_home()
         repo = pathlib.Path(tempfile.mkdtemp())

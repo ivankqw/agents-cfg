@@ -41,21 +41,30 @@ def repo_root() -> pathlib.Path:
 class SkillStatePaths:
     shared: pathlib.Path
     lock: pathlib.Path
+    xdg_state_home: pathlib.Path | None
+    native_lock: pathlib.Path
 
 
 def skill_state_paths() -> SkillStatePaths:
-    home = pathlib.Path.home()
+    home = pathlib.Path.home().resolve()
+    raw_xdg = os.environ.get("XDG_STATE_HOME")
+    xdg_state_home = pathlib.Path(raw_xdg).expanduser().resolve() if raw_xdg else None
     shared = pathlib.Path(os.environ.get("SHARED_SKILLS", home / ".agents" / "skills"))
+    native_lock = (
+        xdg_state_home / "skills" / ".skill-lock.json"
+        if xdg_state_home
+        else home / ".agents" / ".skill-lock.json"
+    )
     configured_lock = os.environ.get("SKILLS_LOCK_FILE")
     if configured_lock:
         lock = pathlib.Path(configured_lock)
-    elif xdg := os.environ.get("XDG_STATE_HOME"):
-        lock = pathlib.Path(xdg) / "skills" / ".skill-lock.json"
     else:
-        lock = home / ".agents" / ".skill-lock.json"
+        lock = native_lock
     return SkillStatePaths(
         shared=shared.expanduser().resolve(),
         lock=lock.expanduser().resolve(),
+        xdg_state_home=xdg_state_home,
+        native_lock=native_lock,
     )
 
 
@@ -163,12 +172,7 @@ def prepare_cli_state() -> None:
     state.lock.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     home = pathlib.Path.home()
     _ensure_cli_alias(home / ".agents" / "skills", state.shared)
-    native_lock = (
-        pathlib.Path(os.environ["XDG_STATE_HOME"]) / "skills" / ".skill-lock.json"
-        if os.environ.get("XDG_STATE_HOME")
-        else home / ".agents" / ".skill-lock.json"
-    )
-    _ensure_cli_alias(native_lock, state.lock)
+    _ensure_cli_alias(state.native_lock, state.lock)
 
 
 def load_catalog(root: pathlib.Path) -> dict[str, dict[str, str]]:
@@ -554,8 +558,8 @@ def schedule(root: pathlib.Path) -> None:
         "SHARED_SKILLS": str(state.shared),
         "SKILLS_LOCK_FILE": str(state.lock),
     }
-    if xdg := os.environ.get("XDG_STATE_HOME"):
-        schedule_environment["XDG_STATE_HOME"] = xdg
+    if state.xdg_state_home:
+        schedule_environment["XDG_STATE_HOME"] = str(state.xdg_state_home)
     minute = int.from_bytes(
         hashlib.sha256(socket.gethostname().encode()).digest()[:8], "big"
     ) % 60
