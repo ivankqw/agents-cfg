@@ -40,25 +40,33 @@ if [ -e "$PSTACK_DIR" ] && [ ! -d "$PSTACK_DIR/.git" ]; then
   echo "pstack path exists but is not a git checkout: $PSTACK_DIR" >&2
   exit 1
 fi
+fetch_pstack_revision() {
+  local remote_revision
+  if git -C "$PSTACK_DIR" fetch --depth 1 origin "$PSTACK_REVISION"; then
+    return 0
+  fi
+  if ! remote_revision="$(git -C "$PSTACK_DIR" ls-remote origin "$PSTACK_REVISION")"; then
+    echo "cannot contact the pstack remote for $PSTACK_DIR; check network access" >&2
+  elif [ -z "$remote_revision" ]; then
+    echo "pstack revision $PSTACK_REVISION is unavailable; check $DEST/pstack-revision.txt" >&2
+  else
+    echo "failed to fetch pstack revision $PSTACK_REVISION from the reachable remote" >&2
+  fi
+  return 1
+}
 if [ -d "$PSTACK_DIR/.git" ]; then
   if [ -n "$(git -C "$PSTACK_DIR" status --porcelain)" ]; then
     echo "pstack checkout has local changes; leaving it unchanged: $PSTACK_DIR" >&2
     exit 1
   fi
   echo "== fetching pinned pstack revision"
-  if ! git -C "$PSTACK_DIR" fetch --depth 1 origin "$PSTACK_REVISION"; then
-    echo "cannot fetch pinned pstack revision $PSTACK_REVISION into $PSTACK_DIR; check network access" >&2
-    exit 1
-  fi
+  fetch_pstack_revision || exit 1
 else
   echo "== fetching pinned pstack revision into $PSTACK_DIR"
   mkdir -p "$(dirname "$PSTACK_DIR")"
   git init "$PSTACK_DIR"
   git -C "$PSTACK_DIR" remote add origin "$PSTACK_REPO"
-  if ! git -C "$PSTACK_DIR" fetch --depth 1 origin "$PSTACK_REVISION"; then
-    echo "cannot fetch pinned pstack revision $PSTACK_REVISION into $PSTACK_DIR; check network access" >&2
-    exit 1
-  fi
+  fetch_pstack_revision || exit 1
 fi
 if ! git -C "$PSTACK_DIR" cat-file -e "$PSTACK_REVISION^{commit}" 2>/dev/null; then
   echo "pstack revision is missing after fetch: $PSTACK_REVISION" >&2

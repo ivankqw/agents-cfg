@@ -27,6 +27,12 @@ class BootstrapMigrationTests(unittest.TestCase):
         fake_git.write_text(
             "#!/usr/bin/env bash\n"
             'printf \'%s\\n\' "$*" >> "$HOME/git.args"\n'
+            'if [ "${FAKE_PSTACK_FETCH_FAILURE:-}" != "" ] && [ "${3:-}" = fetch ]; then exit 1; fi\n'
+            'if [ "${3:-}" = ls-remote ]; then\n'
+            '  if [ "${FAKE_PSTACK_FETCH_FAILURE:-}" = transport ]; then exit 1; fi\n'
+            '  if [ "${FAKE_PSTACK_FETCH_FAILURE:-}" = fetch-error ]; then printf "%s\\trefs/heads/main\\n" "$5"; fi\n'
+            '  exit 0\n'
+            'fi\n'
             "exit 0\n"
         )
         fake_git.chmod(0o755)
@@ -191,3 +197,29 @@ class BootstrapMigrationTests(unittest.TestCase):
             commands,
         )
         self.assertFalse(any(command.startswith("clone ") and "pstack" in command for command in commands))
+
+    def test_pstack_fetch_distinguishes_missing_revision_from_transport_failure(self) -> None:
+        self.create_legacy_checkout()
+        for failure in ("missing-ref", "transport", "fetch-error"):
+            with self.subTest(failure=failure):
+                env = os.environ.copy()
+                env.update(
+                    HOME=str(self.home),
+                    PATH=f"{self.bin}:{os.defpath}",
+                    PSTACK_DIR=str(self.home / "pstack"),
+                    PRIVATE_CONFIG=str(self.home / "private"),
+                    FAKE_PSTACK_FETCH_FAILURE=failure,
+                )
+                result = subprocess.run(
+                    ["bash", str(SCRIPT)], cwd=ROOT, env=env,
+                    text=True, capture_output=True, check=False,
+                )
+
+                self.assertNotEqual(result.returncode, 0)
+                if failure == "missing-ref":
+                    self.assertIn("pstack-revision.txt", result.stderr)
+                    self.assertNotIn("check network access", result.stderr)
+                else:
+                    expected = "network access" if failure == "transport" else "reachable remote"
+                    self.assertIn(expected, result.stderr)
+                    self.assertNotIn("pstack-revision.txt", result.stderr)
