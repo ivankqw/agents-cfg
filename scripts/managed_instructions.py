@@ -26,6 +26,16 @@ class Plan:
     existing: bytes | None
 
 
+class InstructionStateError(ValueError):
+    pass
+
+
+def invalid_state(path: pathlib.Path) -> InstructionStateError:
+    return InstructionStateError(
+        f"invalid instruction state: {path}; remove or repair this file"
+    )
+
+
 def rendered(body: bytes) -> bytes:
     digest = hashlib.sha256(body).hexdigest()
     return f"<!-- impstack-managed: instructions sha256={digest} -->\n".encode() + body
@@ -51,12 +61,20 @@ def classify(key: str, path: pathlib.Path, desired: bytes, legacy: bytes, record
 def load_state(path: pathlib.Path) -> dict[str, str]:
     if not path.exists():
         return {}
-    raw = json.loads(path.read_text())
-    if raw.get("version") != 1 or not isinstance(raw.get("targets"), dict):
-        raise ValueError(f"invalid instruction state: {path}")
+    try:
+        raw = json.loads(path.read_text())
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise invalid_state(path) from None
+    if not isinstance(raw, dict) or raw.get("version") != 1 or not isinstance(raw.get("targets"), dict):
+        raise invalid_state(path)
     targets = raw["targets"]
-    if not all(isinstance(key, str) and re.fullmatch(r"[0-9a-f]{64}", value) for key, value in targets.items()):
-        raise ValueError(f"invalid instruction state: {path}")
+    if not all(
+        isinstance(key, str)
+        and isinstance(value, str)
+        and re.fullmatch(r"[0-9a-f]{64}", value)
+        for key, value in targets.items()
+    ):
+        raise invalid_state(path)
     return targets
 
 
@@ -167,4 +185,9 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    try:
+        exit_code = main(sys.argv[1:])
+    except InstructionStateError as error:
+        print(f"error: {error}", file=sys.stderr)
+        exit_code = 1
+    raise SystemExit(exit_code)

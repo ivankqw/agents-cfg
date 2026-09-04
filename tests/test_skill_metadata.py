@@ -605,6 +605,33 @@ class SkillMetadataTest(unittest.TestCase):
             self.assertEqual(before, [(path.read_bytes(), path.stat().st_ino, path.stat().st_mtime_ns) for path in targets])
             self.assertFalse(any(home.rglob("*.impstack-backup.*")))
 
+    def test_instruction_step_reports_corrupt_state_without_a_traceback(self) -> None:
+        corrupt_states = (
+            b"{broken\n",
+            b'{"version": 1, "targets": {"AGENTS.md": null}}\n',
+            b"\xff\n",
+        )
+        for content in corrupt_states:
+            with self.subTest(content=content), tempfile.TemporaryDirectory() as temp:
+                root = pathlib.Path(temp)
+                home, env = self.create_valid_install_fixture(root)
+                state_path = home / ".local/state/impstack/instructions.json"
+                state_path.parent.mkdir(parents=True)
+                state_path.write_bytes(content)
+
+                result = subprocess.run(
+                    [str(ROOT / "install.sh"), "instructions"], cwd=ROOT, env=env,
+                    text=True, capture_output=True, check=False,
+                )
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(len(result.stderr.splitlines()), 1, result.stderr)
+                self.assertIn(str(state_path), result.stderr)
+                self.assertIn("remove or repair", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertFalse((home / ".claude/CLAUDE.md").exists())
+                self.assertFalse((home / "AGENTS.md").exists())
+
     def test_instruction_step_applies_clean_targets_when_another_is_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)
