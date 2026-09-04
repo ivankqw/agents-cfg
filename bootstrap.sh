@@ -43,11 +43,19 @@ if [ -d "$PSTACK_DIR/.git" ]; then
     exit 1
   fi
   echo "== fetching pinned pstack revision"
-  git -C "$PSTACK_DIR" fetch origin "$PSTACK_REVISION"
+  if ! git -C "$PSTACK_DIR" fetch --depth 1 origin "$PSTACK_REVISION"; then
+    echo "cannot fetch pinned pstack revision $PSTACK_REVISION into $PSTACK_DIR; check network access" >&2
+    exit 1
+  fi
 else
-  echo "== cloning pstack into $PSTACK_DIR"
+  echo "== fetching pinned pstack revision into $PSTACK_DIR"
   mkdir -p "$(dirname "$PSTACK_DIR")"
-  git clone "$PSTACK_REPO" "$PSTACK_DIR"
+  git init "$PSTACK_DIR"
+  git -C "$PSTACK_DIR" remote add origin "$PSTACK_REPO"
+  if ! git -C "$PSTACK_DIR" fetch --depth 1 origin "$PSTACK_REVISION"; then
+    echo "cannot fetch pinned pstack revision $PSTACK_REVISION into $PSTACK_DIR; check network access" >&2
+    exit 1
+  fi
 fi
 if ! git -C "$PSTACK_DIR" cat-file -e "$PSTACK_REVISION^{commit}" 2>/dev/null; then
   echo "pstack revision is missing after fetch: $PSTACK_REVISION" >&2

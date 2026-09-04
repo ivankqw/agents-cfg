@@ -171,3 +171,17 @@ class BootstrapMigrationTests(unittest.TestCase):
         self.assertIn(link_line, result.stdout)
         self.assertTrue(custom.is_dir())
         self.assertFalse(custom.is_symlink())
+
+    def test_new_pstack_checkout_fetches_only_the_pinned_revision(self) -> None:
+        self.create_legacy_checkout()
+
+        result = self.run_bootstrap()
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        commands = (self.home / "git.args").read_text().splitlines()
+        self.assertTrue(any(command.startswith("init ") for command in commands), commands)
+        self.assertTrue(
+            any(" fetch --depth 1 origin " + "0" * 40 in command for command in commands),
+            commands,
+        )
+        self.assertFalse(any(command.startswith("clone ") and "pstack" in command for command in commands))
