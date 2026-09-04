@@ -670,13 +670,15 @@ class SkillMetadataTest(unittest.TestCase):
                     text=True, capture_output=True, check=False,
                 )
 
-                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
                 self.assertEqual(len(result.stderr.splitlines()), 1, result.stderr)
                 self.assertIn(str(state_path), result.stderr)
                 self.assertIn("remove or repair", result.stderr)
                 self.assertNotIn("Traceback", result.stderr)
-                self.assertFalse((home / ".claude/CLAUDE.md").exists())
-                self.assertFalse((home / "AGENTS.md").exists())
+                self.assertTrue((home / ".claude/CLAUDE.md").is_file())
+                self.assertTrue((home / "AGENTS.md").is_file())
+                repaired = json.loads(state_path.read_text())
+                self.assertEqual(set(repaired["targets"]), {".claude/CLAUDE.md", "AGENTS.md"})
 
     def test_instruction_step_applies_clean_targets_when_another_is_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -735,6 +737,239 @@ class SkillMetadataTest(unittest.TestCase):
                 )
                 self.assertEqual(forced.returncode, 0, forced.stderr + forced.stdout)
             self.assertEqual(len(tuple(targets[0].parent.glob("CLAUDE.md.impstack-backup.*"))), 5)
+
+    def test_instruction_replacement_always_backs_up_recorded_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            home, env = self.create_valid_install_fixture(root)
+            command = [str(ROOT / "install.sh"), "instructions"]
+            first = subprocess.run(
+                command, cwd=ROOT, env=env, text=True, capture_output=True,
+            )
+            self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
+            target = home / "AGENTS.md"
+            operator_content = b"operator content that impstack did not write\n"
+            target.write_bytes(operator_content)
+            state_path = home / ".local/state/impstack/instructions.json"
+            state = json.loads(state_path.read_text())
+            state["targets"]["AGENTS.md"] = hashlib.sha256(operator_content).hexdigest()
+            state_path.write_text(json.dumps(state))
+
+            result = subprocess.run(
+                command, cwd=ROOT, env=env, text=True, capture_output=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            self.assertNotEqual(target.read_bytes(), operator_content)
+            backups = tuple(home.glob("AGENTS.md.impstack-backup.*"))
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(backups[0].read_bytes(), operator_content)
+
+        with self.subTest(case="backup failure blocks replacement"), tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            home, env = self.create_valid_install_fixture(root)
+            command = [str(ROOT / "install.sh"), "instructions"]
+            first = subprocess.run(
+                command, cwd=ROOT, env=env, text=True, capture_output=True,
+            )
+            self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
+            target = home / "AGENTS.md"
+            operator_content = b"operator content with a matching recorded digest\n"
+            target.write_bytes(operator_content)
+            state_path = home / ".local/state/impstack/instructions.json"
+            state = json.loads(state_path.read_text())
+            state["targets"]["AGENTS.md"] = hashlib.sha256(operator_content).hexdigest()
+            state_path.write_text(json.dumps(state))
+            broken_backup = home / "AGENTS.md.impstack-backup.broken"
+            broken_backup.symlink_to(home / "missing-backup-target")
+
+            result = subprocess.run(
+                command, cwd=ROOT, env=env, text=True, capture_output=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(target.read_bytes(), operator_content)
+            self.assertNotIn("Traceback", result.stderr)
+
+    def test_instruction_state_read_failure_degrades_to_unknown_provenance(self) -> None:
+        corrupt_states = (
+            ("malformed JSON", b"{broken\n"),
+            ("null digest", b'{"version": 1, "targets": {"AGENTS.md": null}}\n'),
+        )
+        for label, content in corrupt_states:
+            with (
+                self.subTest(case=f"identical target with {label}"),
+                tempfile.TemporaryDirectory() as temp,
+            ):
+                root = pathlib.Path(temp)
+                home, env = self.create_valid_install_fixture(root)
+                command = [str(ROOT / "install.sh"), "instructions"]
+                first = subprocess.run(
+                    command, cwd=ROOT, env=env, text=True, capture_output=True,
+                )
+                self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
+                targets = (home / ".claude/CLAUDE.md", home / "AGENTS.md")
+                before = [
+                    (path.read_bytes(), path.stat().st_ino, path.stat().st_mtime_ns)
+                    for path in targets
+                ]
+                state_path = home / ".local/state/impstack/instructions.json"
+                state_path.write_bytes(content)
+
+                result = subprocess.run(
+                    command, cwd=ROOT, env=env, text=True, capture_output=True,
+                )
+
+                self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+                self.assertEqual(
+                    before,
+                    [
+                        (path.read_bytes(), path.stat().st_ino, path.stat().st_mtime_ns)
+                        for path in targets
+                    ],
+                )
+                self.assertNotIn(str(state_path), result.stderr)
+                self.assertFalse(any(home.rglob("*.impstack-backup.*")))
+                repaired = json.loads(state_path.read_text())["targets"]
+                for path in targets:
+                    key = str(path.relative_to(home))
+                    self.assertEqual(repaired[key], hashlib.sha256(path.read_bytes()).hexdigest())
+
+        with (
+            self.subTest(case="identical target with stale state"),
+            tempfile.TemporaryDirectory() as temp,
+        ):
+            root = pathlib.Path(temp)
+            home, env = self.create_valid_install_fixture(root)
+            command = [str(ROOT / "install.sh"), "instructions"]
+            first = subprocess.run(
+                command, cwd=ROOT, env=env, text=True, capture_output=True,
+            )
+            self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
+            targets = (home / ".claude/CLAUDE.md", home / "AGENTS.md")
+            before = [
+                (path.read_bytes(), path.stat().st_ino, path.stat().st_mtime_ns)
+                for path in targets
+            ]
+            state_path = home / ".local/state/impstack/instructions.json"
+            state = json.loads(state_path.read_text())
+            state["targets"] = {key: "0" * 64 for key in state["targets"]}
+            state_path.write_text(json.dumps(state))
+
+            result = subprocess.run(
+                command, cwd=ROOT, env=env, text=True, capture_output=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            self.assertEqual(
+                before,
+                [
+                    (path.read_bytes(), path.stat().st_ino, path.stat().st_mtime_ns)
+                    for path in targets
+                ],
+            )
+            self.assertFalse(any(home.rglob("*.impstack-backup.*")))
+            repaired = json.loads(state_path.read_text())["targets"]
+            for path in targets:
+                key = str(path.relative_to(home))
+                self.assertEqual(repaired[key], hashlib.sha256(path.read_bytes()).hexdigest())
+
+        with (
+            self.subTest(case="differing target with malformed JSON"),
+            tempfile.TemporaryDirectory() as temp,
+        ):
+            root = pathlib.Path(temp)
+            home, env = self.create_valid_install_fixture(root)
+            command = [str(ROOT / "install.sh"), "instructions"]
+            first = subprocess.run(
+                command, cwd=ROOT, env=env, text=True, capture_output=True,
+            )
+            self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
+            target = home / "AGENTS.md"
+            operator_content = b"operator content with unknown provenance\n"
+            target.write_bytes(operator_content)
+            state_path = home / ".local/state/impstack/instructions.json"
+            state_path.write_bytes(b"{broken\n")
+
+            result = subprocess.run(
+                command, cwd=ROOT, env=env, text=True, capture_output=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(target.read_bytes(), operator_content)
+            backups = tuple(home.glob("AGENTS.md.impstack-backup.*"))
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(backups[0].read_bytes(), operator_content)
+            self.assertIn(str(state_path), result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+
+    def test_instruction_state_write_failure_has_a_clean_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            home, env = self.create_valid_install_fixture(root)
+            state_root = root / "unwritable-state"
+            state_dir = state_root / "impstack"
+            state_dir.mkdir(parents=True)
+            state_dir.chmod(0o500)
+            env["XDG_STATE_HOME"] = str(state_root)
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "instructions"],
+                cwd=ROOT, env=env, text=True, capture_output=True, check=False,
+            )
+            state_dir.chmod(0o700)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertEqual(len(result.stderr.splitlines()), 1, result.stderr)
+            self.assertIn(str(state_root / "impstack/instructions.json"), result.stderr)
+
+    def test_instruction_pair_is_written_before_the_state_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            home, env = self.create_valid_install_fixture(root)
+            state_root = root / "unwritable-state"
+            state_dir = state_root / "impstack"
+            state_dir.mkdir(parents=True)
+            state_dir.chmod(0o500)
+            env["XDG_STATE_HOME"] = str(state_root)
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "instructions"],
+                cwd=ROOT, env=env, text=True, capture_output=True, check=False,
+            )
+            state_dir.chmod(0o700)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue((home / ".claude/CLAUDE.md").is_file())
+            self.assertTrue((home / "AGENTS.md").is_file())
+            self.assertFalse((state_root / "impstack/instructions.json").exists())
+
+    def test_full_install_continues_after_instruction_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            home, env = self.create_valid_install_fixture(root)
+            target = home / "AGENTS.md"
+            target.write_text("operator instructions\n")
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh")],
+                cwd=ROOT, env=env, text=True, capture_output=True, check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("blocked instruction file", result.stderr)
+            later_banners = (
+                "== mcp servers (keys from env; nothing secret is stored in this repo)",
+                "== Codex settings",
+                "== validating third-party skill catalog",
+            )
+            for banner in later_banners:
+                self.assertIn(banner, result.stdout)
+                self.assertGreater(
+                    result.stdout.index(banner),
+                    result.stdout.index("== instruction files"),
+                )
 
     @staticmethod
     def normalize_home(value: str | bytes, home: pathlib.Path) -> str | bytes:
