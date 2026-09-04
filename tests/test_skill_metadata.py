@@ -436,6 +436,22 @@ class SkillMetadataTest(unittest.TestCase):
             self.assertEqual(allowed.returncode, 0, allowed.stderr + allowed.stdout)
             self.assertIn("detected harnesses: none (--no-harness)", allowed.stdout)
 
+    def test_preflight_rejects_a_non_executable_harness_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            _, env = self.create_valid_install_fixture(root)
+            (root / "bin/codex").unlink()
+            claude = root / "bin/claude"
+            claude.chmod(0o644)
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "preflight"], cwd=ROOT, env=env,
+                text=True, capture_output=True, check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing harness", result.stderr)
+
     def test_mcp_reports_genuine_registration_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)

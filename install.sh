@@ -92,9 +92,16 @@ case "$(uname -s)" in Linux|Darwin) ;; *) echo "unsupported OS: $(uname -s)" >&2
 "$AC/bin/skills-sync" resolve-node >/dev/null
 "$AC/bin/skills-sync" resolve-npx >/dev/null
 detected_harnesses=()
-for harness in claude codex opencode; do
-  command -v "$harness" >/dev/null && detected_harnesses+=("$harness")
-done
+while IFS= read -r harness; do
+  detected_harnesses+=("$harness")
+done < <(python3 - <<'PY'
+import shutil
+
+for name in ("claude", "codex", "opencode"):
+    if shutil.which(name):
+        print(name)
+PY
+)
 if [ "${#detected_harnesses[@]}" -eq 0 ]; then
   if [ "$NO_HARNESS" = true ]; then
     echo "  detected harnesses: none (--no-harness)"
@@ -248,8 +255,8 @@ link "$AC/configs/pstack-codex.md" "$CODEX_DIR/pstack-models.md"
 
 install_step_mcp_servers() {
 if [ -f "$AC/mcp/servers.json" ]; then
-  python3 - "$AC/mcp/servers.json" <<'PY'
-import json, os, shutil, subprocess, sys
+  python3 - "$AC/mcp/servers.json" "${detected_harnesses[@]}" <<'PY'
+import json, os, subprocess, sys
 
 failed = False
 
@@ -274,7 +281,7 @@ def add(name, harness, command, probe):
     print(f"  error {name} for {harness}: {detail}", file=sys.stderr)
     failed = True
 
-harnesses = [name for name in ("claude", "codex", "opencode") if shutil.which(name)]
+harnesses = sys.argv[2:]
 for s in json.load(open(sys.argv[1]))["servers"]:
     name = s["name"]
     url = os.environ.get(s["url_env"]) if "url_env" in s else s["url"]
