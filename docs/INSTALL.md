@@ -148,6 +148,11 @@ The skill state paths use this precedence:
 The installer exports both resolved paths to update commands. Generated schedules record the same
 paths. The old `$HOME/skills-lock.json` fallback is not part of this contract.
 
+The installer manages `~/.claude/CLAUDE.md` and `~/AGENTS.md` with a source marker and checksum.
+An unchanged reinstall does not rewrite these files. If either file differs, the installer makes a
+backup, prints a diff, and stops. Examine the backup before you run `./install.sh --force`.
+The installer keeps the five most recent backups for each managed file.
+
 Run the Claude Code and Codex verification checks after an update. Repeat the Hermes canary if you
 use the experimental setup.
 

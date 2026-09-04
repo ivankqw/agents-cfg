@@ -42,6 +42,9 @@ The skills CLI normally writes its lockfile to `~/.agents/.skill-lock.json`. `XD
 that location. `SKILLS_LOCK_FILE` overrides both locations.
 `SHARED_SKILLS` overrides the default `~/.agents/skills` directory. Keep all path resolution in
 `bin/skills-sync`. Export the resolved values before you call child commands.
+Keep instruction-file writes in `scripts/managed_instructions.py`. Its checksum covers all bytes
+after the provenance marker. Do not remove the preflight plan across both managed files.
+Keep backup retention at five files per managed target.
 The normalizer preserves catalog entries that are absent from the current machine. It prints each
 proposed removal. Review those names before you run `bin/skills-sync normalize --allow-removals`.
 

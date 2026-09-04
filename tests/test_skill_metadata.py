@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -470,6 +471,64 @@ class SkillMetadataTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             self.assertTrue((shared / "architect").is_symlink())
             self.assertFalse((pathlib.Path(env["HOME"]) / ".agents/skills/architect").is_symlink())
+
+    def test_instruction_step_backs_up_and_refuses_operator_edits(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            home, env = self.create_valid_install_fixture(root)
+            claude_file = home / ".claude" / "CLAUDE.md"
+            codex_file = home / "AGENTS.md"
+            claude_file.parent.mkdir(parents=True)
+            claude_file.write_text("operator Claude instructions\n")
+            codex_file.write_text("operator Codex instructions\n")
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "instructions"], cwd=ROOT, env=env,
+                text=True, capture_output=True, check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(claude_file.read_text(), "operator Claude instructions\n")
+            self.assertEqual(codex_file.read_text(), "operator Codex instructions\n")
+            self.assertEqual(len(tuple(claude_file.parent.glob("CLAUDE.md.impstack-backup.*"))), 1)
+            self.assertEqual(len(tuple(home.glob("AGENTS.md.impstack-backup.*"))), 1)
+            self.assertIn("--- existing:", result.stdout)
+            self.assertIn("use --force", result.stderr)
+
+    def test_instruction_step_is_a_checked_noop_and_force_keeps_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            home, env = self.create_valid_install_fixture(root)
+            command = [str(ROOT / "install.sh"), "instructions"]
+            first = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True)
+            self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
+            targets = (home / ".claude/CLAUDE.md", home / "AGENTS.md")
+            before = [(path.read_bytes(), path.stat().st_ino, path.stat().st_mtime_ns) for path in targets]
+            for path in targets:
+                marker, body = path.read_bytes().split(b"\n", 1)
+                digest = re.search(rb"sha256=([0-9a-f]{64})", marker)
+                self.assertIsNotNone(digest)
+                self.assertEqual(digest.group(1).decode(), hashlib.sha256(body).hexdigest())
+
+            second = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True)
+            self.assertEqual(second.returncode, 0, second.stderr + second.stdout)
+            self.assertEqual(before, [(path.read_bytes(), path.stat().st_ino, path.stat().st_mtime_ns) for path in targets])
+
+            targets[0].write_text("operator replacement\n")
+            forced = subprocess.run(
+                [str(ROOT / "install.sh"), "--force", "instructions"],
+                cwd=ROOT, env=env, text=True, capture_output=True,
+            )
+            self.assertEqual(forced.returncode, 0, forced.stderr + forced.stdout)
+            self.assertEqual(len(tuple(targets[0].parent.glob("CLAUDE.md.impstack-backup.*"))), 1)
+            for index in range(6):
+                targets[0].write_text(f"operator replacement {index}\n")
+                forced = subprocess.run(
+                    [str(ROOT / "install.sh"), "--force", "instructions"],
+                    cwd=ROOT, env=env, text=True, capture_output=True,
+                )
+                self.assertEqual(forced.returncode, 0, forced.stderr + forced.stdout)
+            self.assertEqual(len(tuple(targets[0].parent.glob("CLAUDE.md.impstack-backup.*"))), 5)
 
     @staticmethod
     def normalize_home(value: str | bytes, home: pathlib.Path) -> str | bytes:
@@ -1110,9 +1169,19 @@ class SkillMetadataTest(unittest.TestCase):
                 self.normalize_home(original_result.stderr, original_home),
                 self.normalize_home(new_result.stderr, new_home),
             )
+            original_snapshot = self.snapshot_home(original_home)
+            new_snapshot = self.snapshot_home(new_home)
+            managed = {".claude/CLAUDE.md", "AGENTS.md"}
             self.assertEqual(
-                self.snapshot_home(original_home), self.snapshot_home(new_home)
+                {key: value for key, value in original_snapshot.items() if key not in managed},
+                {key: value for key, value in new_snapshot.items() if key not in managed},
             )
+            original_claude = original_snapshot[".claude/CLAUDE.md"][1]
+            new_claude = new_snapshot[".claude/CLAUDE.md"][1]
+            self.assertEqual(new_claude.split(b"\n", 1)[1], original_claude)
+            original_codex = original_snapshot["AGENTS.md"][1]
+            new_codex = new_snapshot["AGENTS.md"][1]
+            self.assertEqual(new_codex.split(b"\n", 1)[1], original_codex.split(b"\n\n", 1)[1])
 
     def test_install_lists_exact_step_names(self) -> None:
         result = subprocess.run(
