@@ -258,27 +258,21 @@ def output(result):
 
 def present(command):
     result = subprocess.run(command, capture_output=True, text=True)
-    if result.returncode == 0:
-        return True
-    if "not found" in (result.stderr + result.stdout).lower():
-        return False
-    raise RuntimeError(output(result))
+    return result.returncode == 0
 
-def add(name, harness, command):
+def add(name, harness, command, probe):
     global failed
     result = subprocess.run(command, capture_output=True, text=True)
-    if result.returncode == 0:
-        print(f"  registered {name} for {harness}")
+    installed = present(probe)
+    if installed:
+        state = "registered" if result.returncode == 0 else "already present"
+        print(f"  {state} {name} for {harness}")
         return
     detail = output(result)
-    lowered = detail.lower()
-    if "already exists" in lowered or "already present" in lowered:
-        print(f"  already present {name} for {harness}")
-    elif "authentication required" in lowered or "unauthorized" in lowered:
-        print(f"  authentication required {name} for {harness}: {detail}")
-    else:
-        print(f"  error {name} for {harness}: {detail}", file=sys.stderr)
-        failed = True
+    if result.returncode == 0:
+        detail = "registration command succeeded but the server is absent"
+    print(f"  error {name} for {harness}: {detail}", file=sys.stderr)
+    failed = True
 
 harnesses = [name for name in ("claude", "codex", "opencode") if shutil.which(name)]
 for s in json.load(open(sys.argv[1]))["servers"]:
@@ -297,18 +291,14 @@ for s in json.load(open(sys.argv[1]))["servers"]:
         if env and not os.environ.get(env):
             print(f"  authentication required {name} for Claude: ${env} not set")
         else:
-            try:
-                if present(["claude", "mcp", "get", name]):
-                    print(f"  already present {name} for Claude")
-                    continue
-            except RuntimeError as error:
-                print(f"  error {name} for Claude: {error}", file=sys.stderr)
-                failed = True
+            probe = ["claude", "mcp", "get", name]
+            if present(probe):
+                print(f"  already present {name} for Claude")
                 continue
             cmd = ["claude", "mcp", "add", "--scope", "user", "--transport", "http", name, url]
             if env:
                 cmd += ["--header", f"{s['header_name']}: {os.environ[env]}"]
-            add(name, "Claude", cmd)
+            add(name, "Claude", cmd, probe)
       elif harness == "codex":
         cmd = ["codex", "mcp", "add", name, "--url", url]
         if env:
@@ -321,15 +311,11 @@ for s in json.load(open(sys.argv[1]))["servers"]:
                 print(f"  authentication required {name} for Codex: ${env} not set")
                 continue
             cmd += ["--bearer-token-env-var", env]
-        try:
-            if present(["codex", "mcp", "get", name, "--json"]):
-                print(f"  already present {name} for Codex")
-                continue
-        except RuntimeError as error:
-            print(f"  error {name} for Codex: {error}", file=sys.stderr)
-            failed = True
+        probe = ["codex", "mcp", "get", name, "--json"]
+        if present(probe):
+            print(f"  already present {name} for Codex")
             continue
-        add(name, "Codex", cmd)
+        add(name, "Codex", cmd, probe)
 if failed:
     raise SystemExit(1)
 PY

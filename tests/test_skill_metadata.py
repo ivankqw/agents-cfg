@@ -296,10 +296,15 @@ class SkillMetadataTest(unittest.TestCase):
                 "#!/usr/bin/env bash\n"
                 "set -euo pipefail\n"
                 "if [ \"$1 $2\" = \"mcp get\" ]; then\n"
-                "  echo 'server not found' >&2\n"
-                "  exit 1\n"
+                f"  [ -f \"$HOME/{name}-$3.registered\" ]\n"
+                "  exit $?\n"
                 "fi\n"
                 f"printf '%s\\n' \"$*\" >> \"$HOME/{name}-mcp.args\"\n"
+                + (
+                    f'touch "$HOME/{name}-$7.registered"\n'
+                    if name == "claude"
+                    else f'touch "$HOME/{name}-$3.registered"\n'
+                )
             )
             executable.chmod(0o755)
 
@@ -451,6 +456,34 @@ class SkillMetadataTest(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("error context7 for Claude: configuration write failed", result.stderr)
+
+    def test_mcp_does_not_classify_misleading_error_text_as_success(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            _, env = self.create_valid_install_fixture(root)
+            messages = {
+                "claude": "local MCP settings file already exists at a legacy path and could not be migrated; write aborted",
+                "codex": "internal error: worker pool rejected the request as unauthorized after a panic",
+            }
+            for harness, message in messages.items():
+                executable = root / "bin" / harness
+                executable.write_text(
+                    "#!/usr/bin/env bash\n"
+                    "if [ \"$1 $2\" = \"mcp get\" ]; then echo 'server not found' >&2; exit 1; fi\n"
+                    f"echo {message!r} >&2\n"
+                    "exit 23\n"
+                )
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "mcp"], cwd=ROOT, env=env,
+                text=True, capture_output=True, check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn("already present", result.stdout)
+            self.assertNotIn("authentication required", result.stdout)
+            self.assertIn("write aborted", result.stderr)
+            self.assertIn("after a panic", result.stderr)
 
     def test_install_propagates_explicit_skill_state_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
