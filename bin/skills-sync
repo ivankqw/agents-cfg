@@ -53,7 +53,10 @@ def skill_state_paths() -> SkillStatePaths:
         lock = pathlib.Path(xdg) / "skills" / ".skill-lock.json"
     else:
         lock = home / ".agents" / ".skill-lock.json"
-    return SkillStatePaths(shared=shared, lock=lock)
+    return SkillStatePaths(
+        shared=shared.expanduser().resolve(),
+        lock=lock.expanduser().resolve(),
+    )
 
 
 def live_lock_path() -> pathlib.Path:

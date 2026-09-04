@@ -734,6 +734,32 @@ class SkillsSyncTests(unittest.TestCase):
         )
         self.assertTrue(result.stdout.splitlines()[-1].startswith(f"{expected} 9 "))
 
+    def test_relative_skill_state_paths_are_resolved_before_export(self) -> None:
+        _, home = self.make_home()
+        repo = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(repo))
+        fakebin = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(fakebin))
+        for name in ("node", "npx"):
+            executable = fakebin / name
+            executable.write_text("#!/bin/sh\n")
+            executable.chmod(0o755)
+        overrides = {
+            "SHARED_SKILLS": "relative/skills",
+            "SKILLS_LOCK_FILE": "relative/state/lock.json",
+        }
+        expected_shared = (repo / "relative/skills").resolve()
+        expected_lock = (repo / "relative/state/lock.json").resolve()
+
+        shared = self.run_cli(repo, home, "resolve-shared", path=str(fakebin), env_overrides=overrides)
+        lock = self.run_cli(repo, home, "resolve-lock", path=str(fakebin), env_overrides=overrides)
+        schedule = self.run_cli(repo, home, "schedule", path=str(fakebin), env_overrides=overrides)
+
+        self.assertEqual(shared.stdout.strip(), str(expected_shared))
+        self.assertEqual(lock.stdout.strip(), str(expected_lock))
+        self.assertIn(str(expected_shared), schedule.stdout)
+        self.assertIn(str(expected_lock), schedule.stdout)
+
     def test_node_resolution_sorts_manager_versions_numerically(self) -> None:
         _, home = self.make_home()
         repo = pathlib.Path(tempfile.mkdtemp())
