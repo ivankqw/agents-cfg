@@ -73,16 +73,18 @@ if [ "$#" -eq 1 ]; then
 fi
 
 install_step_preflight() {
+AC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 for c in git python3; do
   command -v "$c" >/dev/null || { echo "missing prerequisite: $c" >&2; exit 1; }
 done
 case "$(uname -s)" in Linux|Darwin) ;; *) echo "unsupported OS: $(uname -s)" >&2; exit 1;; esac
+"$AC/bin/skills-sync" resolve-node >/dev/null
+"$AC/bin/skills-sync" resolve-npx >/dev/null
 if ! command -v bun >/dev/null; then
   echo "  ! bun is missing; pstack watch-pr and orch are unavailable"
   echo "  ! install bun from https://bun.sh, then re-run this install"
 fi
 
-AC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PRIVATE="${PRIVATE_CONFIG:-$HOME/agents-cfg-private}"
 CLAUDE_DIR="$HOME/.claude"
 CODEX_DIR="$HOME/.codex"

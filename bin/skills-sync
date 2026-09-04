@@ -215,45 +215,57 @@ def node_version_key(npx: pathlib.Path) -> tuple[int, ...]:
     return tuple(int(part) for part in match.group(1).split("."))
 
 
-def versioned_npx_candidates(root: pathlib.Path) -> list[pathlib.Path]:
-    return sorted(root.glob("*/bin/npx"), key=node_version_key, reverse=True)
+def versioned_tool_candidates(root: pathlib.Path, name: str) -> list[pathlib.Path]:
+    return sorted(root.glob(f"*/bin/{name}"), key=node_version_key, reverse=True)
 
 
-def resolve_npx() -> pathlib.Path:
-    from_path = shutil.which("npx")
+def resolve_node_tool(name: str) -> pathlib.Path:
+    from_path = shutil.which(name)
     if from_path:
         return pathlib.Path(from_path)
 
     home = pathlib.Path.home()
     candidates: list[pathlib.Path] = []
+    searched = [f"PATH={os.environ.get('PATH', '')}"]
     nvm_bin = os.environ.get("NVM_BIN")
     if nvm_bin:
-        candidates.append(pathlib.Path(nvm_bin) / "npx")
-    candidates.extend(versioned_npx_candidates(home / ".nvm" / "versions" / "node"))
+        candidates.append(pathlib.Path(nvm_bin) / name)
+    nvm_root = home / ".nvm" / "versions" / "node"
+    searched.append(str(nvm_root / "*" / "bin" / name))
+    candidates.extend(versioned_tool_candidates(nvm_root, name))
     mise_data = pathlib.Path(
         os.environ.get("MISE_DATA_DIR", home / ".local/share/mise")
     )
-    candidates.extend(versioned_npx_candidates(mise_data / "installs" / "node"))
+    mise_root = mise_data / "installs" / "node"
+    searched.append(str(mise_root / "*" / "bin" / name))
+    candidates.extend(versioned_tool_candidates(mise_root, name))
     asdf_data = pathlib.Path(os.environ.get("ASDF_DATA_DIR", home / ".asdf"))
-    candidates.extend(versioned_npx_candidates(asdf_data / "installs" / "nodejs"))
-    candidates.append(home / ".bun" / "bin" / "npx")
+    asdf_root = asdf_data / "installs" / "nodejs"
+    searched.append(str(asdf_root / "*" / "bin" / name))
+    candidates.extend(versioned_tool_candidates(asdf_root, name))
+    candidates.append(home / ".bun" / "bin" / name)
     brew_prefix = os.environ.get("HOMEBREW_PREFIX")
     if brew_prefix:
-        candidates.append(pathlib.Path(brew_prefix) / "bin" / "npx")
-    candidates.append(home / ".linuxbrew" / "bin" / "npx")
+        candidates.append(pathlib.Path(brew_prefix) / "bin" / name)
+    candidates.append(home / ".linuxbrew" / "bin" / name)
     if platform.system() == "Linux":
-        candidates.append(pathlib.Path("/home/linuxbrew/.linuxbrew/bin/npx"))
+        candidates.append(pathlib.Path("/home/linuxbrew/.linuxbrew/bin") / name)
     elif not brew_prefix:
         candidates.extend(
-            (pathlib.Path("/opt/homebrew/bin/npx"), pathlib.Path("/usr/local/bin/npx"))
+            (pathlib.Path("/opt/homebrew/bin") / name, pathlib.Path("/usr/local/bin") / name)
         )
 
+    searched.extend(str(candidate) for candidate in candidates)
     for candidate in candidates:
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return candidate
     raise FileNotFoundError(
-        "npx not found; checked PATH, nvm, mise, asdf, Bun, and Homebrew locations"
+        f"{name} not found; checked: " + ", ".join(dict.fromkeys(searched))
     )
+
+
+def resolve_npx() -> pathlib.Path:
+    return resolve_node_tool("npx")
 
 
 def command_env(npx: pathlib.Path) -> dict[str, str]:
@@ -550,6 +562,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     subparsers.add_parser("schedule")
     subparsers.add_parser("install-missing", help="Restore absent catalog entries.")
     subparsers.add_parser("resolve-npx", help="Print the resolved npx executable.")
+    subparsers.add_parser("resolve-node", help="Print the resolved node executable.")
     return parser.parse_args(argv)
 
 
@@ -568,6 +581,9 @@ def main(argv: list[str]) -> int:
             return install_missing(repo_root())
         if args.command == "resolve-npx":
             print(resolve_npx())
+            return 0
+        if args.command == "resolve-node":
+            print(resolve_node_tool("node"))
             return 0
         if args.command == "run":
             return run(repo_root(), no_update=args.no_update, no_push=args.no_push)

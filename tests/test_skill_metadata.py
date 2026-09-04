@@ -333,11 +333,56 @@ class SkillMetadataTest(unittest.TestCase):
         npx = fakebin / "npx"
         npx.write_text("#!/usr/bin/env bash\nexit 0\n")
         npx.chmod(0o755)
+        node = fakebin / "node"
+        node.write_text("#!/usr/bin/env bash\nexit 0\n")
+        node.chmod(0o755)
         self.write_fake_mcp_clis(fakebin)
         env = self.base_runtime_env(home, fakebin, pstack=pstack)
         env["CONTEXT7_API_KEY"] = "test-token"
         env["EXECUTOR_MCP_URL"] = "https://executor.example/mcp"
         return home, env
+
+    def test_preflight_fails_early_with_all_node_search_locations(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            home = root / "home"
+            fakebin = root / "bin"
+            home.mkdir()
+            fakebin.mkdir()
+            for command in ("bash", "dirname", "python3", "uname"):
+                source = shutil.which(command, path=TEST_SYSTEM_PATH)
+                self.assertIsNotNone(source)
+                (fakebin / command).symlink_to(source)
+            pstack = self.create_fake_pstack_checkout(root)
+            self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().strip())
+            env = self.base_runtime_env(home, fakebin, pstack=pstack)
+            env["PATH"] = str(fakebin)
+            env.update(
+                NVM_BIN=str(root / "nvm-bin"),
+                MISE_DATA_DIR=str(root / "mise"),
+                ASDF_DATA_DIR=str(root / "asdf"),
+                HOMEBREW_PREFIX=str(root / "brew"),
+            )
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "preflight"],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            for location in (
+                env["PATH"],
+                str(root / "nvm-bin" / "node"),
+                str(root / "mise" / "installs" / "node" / "*/bin/node"),
+                str(root / "asdf" / "installs" / "nodejs" / "*/bin/node"),
+                str(root / "brew" / "bin" / "node"),
+            ):
+                self.assertIn(location, result.stderr)
+            self.assertFalse((home / ".claude").exists())
 
     @staticmethod
     def normalize_home(value: str | bytes, home: pathlib.Path) -> str | bytes:
