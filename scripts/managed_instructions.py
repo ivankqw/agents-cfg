@@ -26,14 +26,29 @@ class Plan:
     existing: bytes | None
 
 
-class InstructionStateError(ValueError):
+@dataclass(frozen=True)
+class ProtectedPlan:
+    plan: Plan
+    backup_path: pathlib.Path | None
+
+
+@dataclass(frozen=True)
+class StateObservation:
+    recorded: dict[str, str]
+    read_diagnostic: str | None
+
+
+class InstructionFilesystemError(OSError):
     pass
 
 
-def invalid_state(path: pathlib.Path) -> InstructionStateError:
-    return InstructionStateError(
-        f"invalid instruction state: {path}; remove or repair this file"
-    )
+def filesystem_error(path: pathlib.Path, error: OSError) -> InstructionFilesystemError:
+    detail = error.strerror or str(error)
+    return InstructionFilesystemError(f"could not write instruction file: {path}: {detail}")
+
+
+def state_diagnostic(path: pathlib.Path, detail: str) -> str:
+    return f"could not read instruction state: {path}: {detail}; remove or repair this file"
 
 
 def rendered(body: bytes) -> bytes:
@@ -46,9 +61,14 @@ def file_digest(content: bytes) -> str:
 
 
 def classify(key: str, path: pathlib.Path, desired: bytes, legacy: bytes, recorded: str | None) -> Plan:
-    if not path.exists():
-        return Plan(key, path, desired, "replace", None)
-    existing = path.read_bytes()
+    try:
+        if not path.exists():
+            return Plan(key, path, desired, "replace", None)
+        existing = path.read_bytes()
+    except OSError as error:
+        raise InstructionFilesystemError(
+            f"could not read instruction file: {path}: {error.strerror or error}"
+        ) from None
     if existing == desired:
         return Plan(key, path, desired, "noop", existing)
     if recorded == file_digest(existing):
@@ -58,15 +78,17 @@ def classify(key: str, path: pathlib.Path, desired: bytes, legacy: bytes, record
     return Plan(key, path, desired, "conflict", existing)
 
 
-def load_state(path: pathlib.Path) -> dict[str, str]:
-    if not path.exists():
-        return {}
+def observe_state(path: pathlib.Path) -> StateObservation:
     try:
         raw = json.loads(path.read_text())
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        raise invalid_state(path) from None
+    except FileNotFoundError:
+        return StateObservation({}, None)
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        return StateObservation({}, state_diagnostic(path, str(error)))
+    except OSError as error:
+        return StateObservation({}, state_diagnostic(path, error.strerror or str(error)))
     if not isinstance(raw, dict) or raw.get("version") != 1 or not isinstance(raw.get("targets"), dict):
-        raise invalid_state(path)
+        return StateObservation({}, state_diagnostic(path, "invalid format"))
     targets = raw["targets"]
     if not all(
         isinstance(key, str)
@@ -74,8 +96,8 @@ def load_state(path: pathlib.Path) -> dict[str, str]:
         and re.fullmatch(r"[0-9a-f]{64}", value)
         for key, value in targets.items()
     ):
-        raise invalid_state(path)
-    return targets
+        return StateObservation({}, state_diagnostic(path, "invalid target digest"))
+    return StateObservation(targets, None)
 
 
 def write_state(path: pathlib.Path, targets: dict[str, str]) -> None:
@@ -84,23 +106,26 @@ def write_state(path: pathlib.Path, targets: dict[str, str]) -> None:
 
 
 def backup(path: pathlib.Path, content: bytes) -> pathlib.Path:
-    digest = hashlib.sha256(content).hexdigest()[:12]
-    base = path.with_name(f"{path.name}.impstack-backup.{digest}")
-    candidate = base
-    counter = 1
-    while candidate.exists():
-        candidate = pathlib.Path(f"{base}.{counter}")
-        counter += 1
-    candidate.write_bytes(content)
-    older_backups = sorted(
-        (item for item in path.parent.glob(f"{path.name}.impstack-backup.*") if item != candidate),
-        key=lambda item: (item.stat().st_mtime_ns, item.name),
-    )
-    excess = max(0, len(older_backups) + 1 - MAX_BACKUPS)
-    for expired in older_backups[:excess]:
-        expired.unlink()
-        print(f"removed old backup: {expired}")
-    return candidate
+    try:
+        digest = hashlib.sha256(content).hexdigest()[:12]
+        base = path.with_name(f"{path.name}.impstack-backup.{digest}")
+        candidate = base
+        counter = 1
+        while candidate.exists():
+            candidate = pathlib.Path(f"{base}.{counter}")
+            counter += 1
+        candidate.write_bytes(content)
+        older_backups = sorted(
+            (item for item in path.parent.glob(f"{path.name}.impstack-backup.*") if item != candidate),
+            key=lambda item: (item.stat().st_mtime_ns, item.name),
+        )
+        excess = max(0, len(older_backups) + 1 - MAX_BACKUPS)
+        for expired in older_backups[:excess]:
+            expired.unlink()
+            print(f"removed old backup: {expired}")
+        return candidate
+    except OSError as error:
+        raise filesystem_error(path, error) from None
 
 
 def show_diff(path: pathlib.Path, existing: bytes, desired: bytes) -> None:
@@ -111,12 +136,56 @@ def show_diff(path: pathlib.Path, existing: bytes, desired: bytes) -> None:
     )
 
 
+def stage(path: pathlib.Path, content: bytes) -> pathlib.Path:
+    temporary: pathlib.Path | None = None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            dir=path.parent, prefix=f".{path.name}.", delete=False
+        ) as output:
+            temporary = pathlib.Path(output.name)
+            output.write(content)
+        return temporary
+    except OSError as error:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise filesystem_error(path, error) from None
+
+
+def commit(temporary: pathlib.Path, path: pathlib.Path) -> None:
+    try:
+        os.replace(temporary, path)
+    except OSError as error:
+        raise filesystem_error(path, error) from None
+
+
 def replace(path: pathlib.Path, content: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.", delete=False) as output:
-        temporary = pathlib.Path(output.name)
-        output.write(content)
-    os.replace(temporary, path)
+    temporary = stage(path, content)
+    try:
+        commit(temporary, path)
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def protect(plan: Plan) -> ProtectedPlan:
+    if plan.action == "noop" or plan.existing is None:
+        return ProtectedPlan(plan, None)
+    saved = backup(plan.path, plan.existing)
+    print(f"backup: {saved}")
+    return ProtectedPlan(plan, saved)
+
+
+def stage_replacement(protected: ProtectedPlan) -> pathlib.Path:
+    plan = protected.plan
+    assert plan.action != "noop"
+    assert plan.existing is None or protected.backup_path is not None
+    return stage(plan.path, plan.desired)
 
 
 def main(argv: list[str]) -> int:
@@ -128,7 +197,8 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     state_root = pathlib.Path(os.environ.get("XDG_STATE_HOME", args.home / ".local/state"))
     state_path = state_root.expanduser().resolve() / "impstack" / "instructions.json"
-    recorded = load_state(state_path)
+    observation = observe_state(state_path)
+    recorded = observation.recorded.copy()
 
     private_exists = (args.private / "AGENTS.md").is_file()
     claude_body = b"@AGENTS.portable.md\n" + (b"@AGENTS.private.md\n" if private_exists else b"")
@@ -160,22 +230,36 @@ def main(argv: list[str]) -> int:
     )
     conflicts = [plan for plan in plans if plan.action == "conflict"]
     ready = plans if args.force else tuple(plan for plan in plans if plan.action != "conflict")
-    for plan in ready:
-        if plan.action == "conflict":
-            assert plan.existing is not None
-            saved = backup(plan.path, plan.existing)
-            print(f"backup: {saved}")
-            show_diff(plan.path, plan.existing, plan.desired)
-        if plan.action != "noop":
-            replace(plan.path, plan.desired)
+    if observation.read_diagnostic and any(plan.action != "noop" for plan in plans):
+        print(f"warning: {observation.read_diagnostic}", file=sys.stderr)
+
+    protected_plans = tuple(protect(plan) for plan in plans)
+    ready_keys = {plan.key for plan in ready}
+
+    staged: list[tuple[ProtectedPlan, pathlib.Path]] = []
+    try:
+        for protected in protected_plans:
+            plan = protected.plan
+            if plan.key not in ready_keys:
+                continue
+            if plan.action != "noop":
+                staged.append((protected, stage_replacement(protected)))
+        for protected, temporary in staged:
+            plan = protected.plan
+            commit(temporary, plan.path)
             print(f"managed: {plan.path}")
-        recorded[plan.key] = file_digest(plan.desired)
+        for plan in ready:
+            recorded[plan.key] = file_digest(plan.desired)
         write_state(state_path, recorded)
+    finally:
+        for _, temporary in staged:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
     if not args.force:
         for plan in conflicts:
             assert plan.existing is not None
-            saved = backup(plan.path, plan.existing)
-            print(f"backup: {saved}")
             show_diff(plan.path, plan.existing, plan.desired)
             print(
                 f"blocked instruction file: {plan.path}; examine the backup and diff, then use --force",
@@ -187,7 +271,7 @@ def main(argv: list[str]) -> int:
 if __name__ == "__main__":
     try:
         exit_code = main(sys.argv[1:])
-    except InstructionStateError as error:
+    except InstructionFilesystemError as error:
         print(f"error: {error}", file=sys.stderr)
         exit_code = 1
     raise SystemExit(exit_code)

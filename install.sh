@@ -7,22 +7,22 @@
 set -euo pipefail
 
 INSTALL_STEP_REGISTRY=(
-  'preflight|== preflight|install_step_preflight'
-  'skills|== skills|install_step_skills'
-  'skill-triggers|== constraining explicit-use third-party skill triggers|install_step_constraining'
-  'skill-unlock|== unlocking skills listed in skills-unlock.txt|install_step_unlocking'
-  'agents-hooks|== agents / hooks|install_step_agents_hooks'
-  'bin|== bin|install_step_bin'
-  'instructions|== instruction files|install_step_instruction_files'
-  'mcp|== mcp servers (keys from env; nothing secret is stored in this repo)|install_step_mcp_servers'
-  'codex-settings|== Codex settings|install_step_codex_settings'
-  'validate|== validating third-party skill catalog|install_step_validating_catalog'
+  'preflight|== preflight|install_step_preflight|strict'
+  'skills|== skills|install_step_skills|strict'
+  'skill-triggers|== constraining explicit-use third-party skill triggers|install_step_constraining|strict'
+  'skill-unlock|== unlocking skills listed in skills-unlock.txt|install_step_unlocking|strict'
+  'agents-hooks|== agents / hooks|install_step_agents_hooks|strict'
+  'bin|== bin|install_step_bin|strict'
+  'instructions|== instruction files|install_step_instruction_files|defer'
+  'mcp|== mcp servers (keys from env; nothing secret is stored in this repo)|install_step_mcp_servers|strict'
+  'codex-settings|== Codex settings|install_step_codex_settings|strict'
+  'validate|== validating third-party skill catalog|install_step_validating_catalog|strict'
 )
 
 list_install_steps() {
-  local entry name banner function_name
+  local entry name banner function_name failure_policy
   for entry in "${INSTALL_STEP_REGISTRY[@]}"; do
-    IFS='|' read -r name banner function_name <<< "$entry"
+    IFS='|' read -r name banner function_name failure_policy <<< "$entry"
     printf '%s\n' "$name"
   done
 }
@@ -37,9 +37,9 @@ print_install_help() {
 }
 
 run_install_step() {
-  local entry name banner function_name
+  local entry name banner function_name failure_policy
   entry="$1"
-  IFS='|' read -r name banner function_name <<< "$entry"
+  IFS='|' read -r name banner function_name failure_policy <<< "$entry"
   echo "$banner"
   "$function_name"
 }
@@ -70,7 +70,7 @@ if [ -n "$action" ]; then
     exit 0
   fi
   for entry in "${INSTALL_STEP_REGISTRY[@]}"; do
-    IFS='|' read -r name banner function_name <<< "$entry"
+    IFS='|' read -r name banner function_name failure_policy <<< "$entry"
     if [ "$name" = "$action" ]; then
       selected_entry="$entry"
       break
@@ -449,10 +449,24 @@ install_step_validating_catalog() {
 }
 
 if [ -z "$action" ]; then
+  deferred_status=0
   for entry in "${INSTALL_STEP_REGISTRY[@]}"; do
-    run_install_step "$entry"
+    IFS='|' read -r name banner function_name failure_policy <<< "$entry"
+    if [ "$failure_policy" = "defer" ]; then
+      echo "$banner"
+      set +e
+      (set -e; "$function_name")
+      step_status=$?
+      set -e
+      if [ "$step_status" -ne 0 ]; then
+        deferred_status="$step_status"
+      fi
+    else
+      run_install_step "$entry"
+    fi
   done
   echo "== done. Merge the settings templates by hand."
+  exit "$deferred_status"
 else
   if [ "$action" != "preflight" ]; then
     run_install_step "${INSTALL_STEP_REGISTRY[0]}"
