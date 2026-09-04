@@ -149,8 +149,11 @@ The installer exports both resolved paths to update commands. Generated schedule
 paths. The old `$HOME/skills-lock.json` fallback is not part of this contract.
 
 The installer manages `~/.claude/CLAUDE.md` and `~/AGENTS.md` with a source marker and checksum.
-An unchanged reinstall does not rewrite these files. If either file differs, the installer makes a
-backup, prints a diff, and stops. Examine the backup before you run `./install.sh --force`.
+An unchanged reinstall does not rewrite these files. The installer backs up an existing file before
+it replaces that file. If an existing file differs and provenance is unknown, the named
+`instructions` step prints a diff and returns a nonzero status. A full install continues with later
+steps and returns a nonzero status after they finish. Examine the backup before you run
+`./install.sh --force`.
 The installer keeps the five most recent backups for each managed file.
 
 Run the Claude Code and Codex verification checks after an update. Repeat the Hermes canary if you

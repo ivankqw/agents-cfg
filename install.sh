@@ -246,11 +246,14 @@ link "$AC/conventions/AGENTS.md" "$CLAUDE_DIR/AGENTS.portable.md"
 if [ -f "$PRIVATE/AGENTS.md" ]; then
   link "$PRIVATE/AGENTS.md" "$CLAUDE_DIR/AGENTS.private.md"
 fi
+local instruction_status=0
+local -a managed_args
 managed_args=(--root "$AC" --home "$HOME" --private "$PRIVATE")
 [ "$FORCE" = true ] && managed_args+=(--force)
-python3 "$AC/scripts/managed_instructions.py" "${managed_args[@]}"
+python3 "$AC/scripts/managed_instructions.py" "${managed_args[@]}" || instruction_status=$?
 link "$HOME/AGENTS.md" "$CODEX_DIR/AGENTS.md"
 link "$AC/configs/pstack-codex.md" "$CODEX_DIR/pstack-models.md"
+return "$instruction_status"
 }
 
 install_step_mcp_servers() {

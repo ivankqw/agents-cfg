@@ -970,6 +970,11 @@ class SkillMetadataTest(unittest.TestCase):
                     result.stdout.index(banner),
                     result.stdout.index("== instruction files"),
                 )
+            self.assertEqual((home / ".codex/AGENTS.md").resolve(), target.resolve())
+            self.assertEqual(
+                (home / ".codex/pstack-models.md").resolve(),
+                (ROOT / "configs/pstack-codex.md").resolve(),
+            )
 
     @staticmethod
     def normalize_home(value: str | bytes, home: pathlib.Path) -> str | bytes:
