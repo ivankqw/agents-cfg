@@ -6,6 +6,73 @@
 # repo and the workflows stay identical minus the employer specifics.
 set -euo pipefail
 
+INSTALL_STEP_REGISTRY=(
+  'preflight|== preflight|install_step_preflight'
+  'skills|== skills|install_step_skills'
+  'skill-triggers|== constraining explicit-use third-party skill triggers|install_step_constraining'
+  'skill-unlock|== unlocking skills listed in skills-unlock.txt|install_step_unlocking'
+  'agents-hooks|== agents / hooks|install_step_agents_hooks'
+  'bin|== bin|install_step_bin'
+  'instructions|== instruction files|install_step_instruction_files'
+  'mcp|== mcp servers (keys from env; nothing secret is stored in this repo)|install_step_mcp_servers'
+  'codex-settings|== Codex settings|install_step_codex_settings'
+  'validate|== validating third-party skill catalog|install_step_validating_catalog'
+)
+
+list_install_steps() {
+  local entry name banner function_name
+  for entry in "${INSTALL_STEP_REGISTRY[@]}"; do
+    IFS='|' read -r name banner function_name <<< "$entry"
+    printf '%s\n' "$name"
+  done
+}
+
+print_install_help() {
+  echo "usage: ./install.sh [--list|--help|<step>]"
+  echo
+  echo "A single step always runs preflight first."
+  echo
+  echo "Valid steps:"
+  list_install_steps
+}
+
+run_install_step() {
+  local entry name banner function_name
+  entry="$1"
+  IFS='|' read -r name banner function_name <<< "$entry"
+  echo "$banner"
+  "$function_name"
+}
+
+selected_entry=""
+if [ "$#" -gt 1 ]; then
+  list_install_steps >&2
+  exit 2
+fi
+if [ "$#" -eq 1 ]; then
+  if [ "$1" = "--list" ]; then
+    list_install_steps
+    exit 0
+  fi
+  if [ "$1" = "--help" ]; then
+    print_install_help
+    exit 0
+  fi
+  for entry in "${INSTALL_STEP_REGISTRY[@]}"; do
+    IFS='|' read -r name banner function_name <<< "$entry"
+    if [ "$name" = "$1" ]; then
+      selected_entry="$entry"
+      break
+    fi
+  done
+  if [ -z "$selected_entry" ]; then
+    echo "unknown install step: $1" >&2
+    list_install_steps >&2
+    exit 2
+  fi
+fi
+
+install_step_preflight() {
 for c in git python3; do
   command -v "$c" >/dev/null || { echo "missing prerequisite: $c" >&2; exit 1; }
 done
@@ -36,8 +103,9 @@ link() { # link <target> <linkname>
   if [ -L "$2" ] || [ ! -e "$2" ]; then ln -sfn "$1" "$2"
   else echo "  ! not a symlink, leaving alone: $2"; fi
 }
+}
 
-echo "== skills"
+install_step_skills() {
 if ! "$AC/bin/skills-sync" install-missing; then
   echo "  ! some cataloged skills could not be restored; continuing install" >&2
 fi
@@ -95,17 +163,20 @@ done
 for f in "$PSTACK_PROMPTS"/*.md; do
   link "$f" "$CODEX_DIR/prompts/$(basename "$f")"
 done
+}
 
-echo "== constraining explicit-use third-party skill triggers"
+install_step_constraining() {
 python3 "$AC/scripts/skill_metadata.py" apply "$SHARED_SKILLS"
 python3 "$AC/scripts/skill_metadata.py" check "$SHARED_SKILLS"
 
 for d in "$SHARED_SKILLS"/*/; do link "${d%/}" "$CLAUDE_DIR/skills/$(basename "$d")"; done
+}
 
-echo "== unlocking skills listed in skills-unlock.txt"
+install_step_unlocking() {
 python3 "$AC/scripts/skill_metadata.py" unlock "$AC/skills-unlock.txt" "$SHARED_SKILLS"
+}
 
-echo "== agents / hooks"
+install_step_agents_hooks() {
 for f in "$AC"/agents/*.md;  do link "$f" "$CLAUDE_DIR/agents/$(basename "$f")"; done
 STALE_HOOK="$CLAUDE_DIR/hooks/codex_review_reminder.py"
 if [ -L "$STALE_HOOK" ]; then
@@ -115,8 +186,9 @@ elif [ -e "$STALE_HOOK" ]; then
 fi
 for f in "$AC"/hooks/*;      do link "$f" "$CLAUDE_DIR/hooks/$(basename "$f")"; done
 for f in "$AC"/hooks/*;      do link "$f" "$CODEX_DIR/hooks/$(basename "$f")"; done
+}
 
-echo "== bin"
+install_step_bin() {
 STALE_DELEGATE="$BIN/delegate"
 if [ -L "$STALE_DELEGATE" ]; then
   rm -f "$STALE_DELEGATE"
@@ -125,8 +197,11 @@ elif [ -e "$STALE_DELEGATE" ]; then
 fi
 for f in "$AC"/bin/*;        do link "$f" "$BIN/$(basename "$f")"; done
 [ -d "$PRIVATE/bin" ] && for f in "$PRIVATE"/bin/*; do link "$f" "$BIN/$(basename "$f")"; done
+# A false private-bin test returns non-zero; keep the function successful under set -e.
+:
+}
 
-echo "== instruction files"
+install_step_instruction_files() {
 # Claude reads CLAUDE.md and expands @imports natively, so edits are live.
 link "$AC/conventions/AGENTS.md" "$CLAUDE_DIR/AGENTS.portable.md"
 : > "$CLAUDE_DIR/CLAUDE.md.tmp"
@@ -145,8 +220,9 @@ mv -f "$CLAUDE_DIR/CLAUDE.md.tmp" "$CLAUDE_DIR/CLAUDE.md"
 } > "$HOME/AGENTS.md"
 link "$HOME/AGENTS.md" "$CODEX_DIR/AGENTS.md"
 link "$AC/configs/pstack-codex.md" "$CODEX_DIR/pstack-models.md"
+}
 
-echo "== mcp servers (keys from env; nothing secret is stored in this repo)"
+install_step_mcp_servers() {
 if [ -f "$AC/mcp/servers.json" ]; then
   python3 - "$AC/mcp/servers.json" <<'PY'
 import json, os, shutil, subprocess, sys
@@ -181,8 +257,9 @@ for s in json.load(open(sys.argv[1]))["servers"]:
         print(f"  {state} {name} for Codex")
 PY
 fi
+}
 
-echo "== Codex settings"
+install_step_codex_settings() {
 CODEX_CONFIG="$CODEX_DIR/config.toml"
 missing="$(python3 - "$CODEX_CONFIG" "$HOME" "$PSTACK_RESOLVED" <<'PY'
 import pathlib, re, sys
@@ -290,8 +367,20 @@ if [ -n "$missing" ]; then
   echo "  ! merge $AC/settings/codex.config.template.toml into $CODEX_CONFIG"
   echo "  ! replace HOME_PATH in the template with $HOME"
 fi
+}
 
-echo "== validating third-party skill catalog"
+install_step_validating_catalog() {
 "$AC/bin/skills-sync" check
+}
 
-echo "== done. Merge the settings templates by hand."
+if [ "$#" -eq 0 ]; then
+  for entry in "${INSTALL_STEP_REGISTRY[@]}"; do
+    run_install_step "$entry"
+  done
+  echo "== done. Merge the settings templates by hand."
+else
+  if [ "$1" != "preflight" ]; then
+    run_install_step "${INSTALL_STEP_REGISTRY[0]}"
+  fi
+  run_install_step "$selected_entry"
+fi

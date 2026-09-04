@@ -131,6 +131,38 @@ EXPECTED_OVERRIDE_NAMES = (
     "ponytail-review",
 )
 
+EXPECTED_INSTALL_STEPS = (
+    "preflight",
+    "skills",
+    "skill-triggers",
+    "skill-unlock",
+    "agents-hooks",
+    "bin",
+    "instructions",
+    "mcp",
+    "codex-settings",
+    "validate",
+)
+
+EXPECTED_INSTALL_BANNERS = {
+    "preflight": ("preflight",),
+    "skills": ("preflight", "skills"),
+    "skill-triggers": (
+        "preflight",
+        "constraining explicit-use third-party skill triggers",
+    ),
+    "skill-unlock": ("preflight", "unlocking skills listed in skills-unlock.txt"),
+    "agents-hooks": ("preflight", "agents / hooks"),
+    "bin": ("preflight", "bin"),
+    "instructions": ("preflight", "instruction files"),
+    "mcp": (
+        "preflight",
+        "mcp servers (keys from env; nothing secret is stored in this repo)",
+    ),
+    "codex-settings": ("preflight", "Codex settings"),
+    "validate": ("preflight", "validating third-party skill catalog"),
+}
+
 
 class SkillMetadataTest(unittest.TestCase):
     def create_root(self) -> pathlib.Path:
@@ -281,6 +313,68 @@ class SkillMetadataTest(unittest.TestCase):
         env["FAKE_PSTACK_REVISION"] = revision
         env["GIT"] = str(fakebin / "git")
         return env
+
+    def create_valid_install_fixture(
+        self, root: pathlib.Path, *, home_name: str = "home"
+    ) -> tuple[pathlib.Path, dict[str, str]]:
+        home = root / home_name
+        fakebin = root / "bin"
+        home.mkdir()
+        fakebin.mkdir(exist_ok=True)
+        shared = home / ".agents" / "skills"
+        shared.mkdir(parents=True)
+        self.populate_imported_skills(shared)
+        pstack = (
+            self.create_fake_pstack_checkout(root)
+            if not (root / "pstack").exists()
+            else root / "pstack"
+        )
+        self.write_fake_git(fakebin, (ROOT / "pstack-revision.txt").read_text().splitlines()[0])
+        npx = fakebin / "npx"
+        npx.write_text("#!/usr/bin/env bash\nexit 0\n")
+        npx.chmod(0o755)
+        self.write_fake_mcp_clis(fakebin)
+        env = self.base_runtime_env(home, fakebin, pstack=pstack)
+        env["CONTEXT7_API_KEY"] = "test-token"
+        env["EXECUTOR_MCP_URL"] = "https://executor.example/mcp"
+        return home, env
+
+    @staticmethod
+    def normalize_home(value: str | bytes, home: pathlib.Path) -> str | bytes:
+        if isinstance(value, bytes):
+            return value.replace(os.fsencode(str(home)), b"<HOME>")
+        return value.replace(str(home), "<HOME>")
+
+    def snapshot_home(
+        self, home: pathlib.Path
+    ) -> dict[str, tuple[str, str | bytes | int]]:
+        snapshot: dict[str, tuple[str, str | bytes | int]] = {
+            ".": ("directory", "")
+        }
+
+        def visit(directory: pathlib.Path) -> None:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    path = pathlib.Path(entry.path)
+                    relative = path.relative_to(home).as_posix()
+                    if entry.is_symlink():
+                        snapshot[relative] = (
+                            "symlink",
+                            self.normalize_home(os.readlink(path), home),
+                        )
+                    elif entry.is_dir(follow_symlinks=False):
+                        snapshot[relative] = ("directory", "")
+                        visit(path)
+                    elif entry.is_file(follow_symlinks=False):
+                        snapshot[relative] = ("file", path.read_bytes())
+                    else:
+                        snapshot[relative] = (
+                            "other",
+                            entry.stat(follow_symlinks=False).st_mode,
+                        )
+
+        visit(home)
+        return snapshot
 
     def test_check_fails_for_broad_descriptions(self) -> None:
         root = self.create_root()
@@ -834,6 +928,177 @@ class SkillMetadataTest(unittest.TestCase):
             "skip context7 for Codex: header CONTEXT7_API_KEY is not bearer auth",
             result.stdout,
         )
+
+    def test_install_matches_original_in_distinct_isolated_homes(self) -> None:
+        original_bytes = subprocess.run(
+            ["git", "show", "origin/main:install.sh"],
+            cwd=ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        ).stdout
+        with tempfile.NamedTemporaryFile(
+            dir=ROOT, prefix=".install-original-", suffix=".sh", delete=False
+        ) as original_file:
+            original_path = pathlib.Path(original_file.name)
+            original_file.write(original_bytes)
+        self.addCleanup(original_path.unlink, missing_ok=True)
+        original_path.chmod(0o755)
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            original_home, original_env = self.create_valid_install_fixture(
+                root, home_name="original-home"
+            )
+            new_home, new_env = self.create_valid_install_fixture(
+                root, home_name="new-home"
+            )
+
+            original_result = subprocess.run(
+                [str(original_path)],
+                cwd=ROOT,
+                env=original_env,
+                text=False,
+                capture_output=True,
+                check=False,
+            )
+            new_result = subprocess.run(
+                [str(ROOT / "install.sh")],
+                cwd=ROOT,
+                env=new_env,
+                text=False,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(original_result.returncode, 0, original_result.stderr)
+            self.assertEqual(new_result.returncode, 0, new_result.stderr)
+            self.assertEqual(
+                b"== preflight\n"
+                + self.normalize_home(original_result.stdout, original_home),
+                self.normalize_home(new_result.stdout, new_home),
+            )
+            self.assertEqual(
+                self.normalize_home(original_result.stderr, original_home),
+                self.normalize_home(new_result.stderr, new_home),
+            )
+            self.assertEqual(
+                self.snapshot_home(original_home), self.snapshot_home(new_home)
+            )
+
+    def test_install_lists_exact_step_names(self) -> None:
+        result = subprocess.run(
+            [str(ROOT / "install.sh"), "--list"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(tuple(result.stdout.splitlines()), EXPECTED_INSTALL_STEPS)
+
+    def test_install_help_says_named_steps_run_preflight_first(self) -> None:
+        result = subprocess.run(
+            [str(ROOT / "install.sh"), "--help"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("A single step always runs preflight first.", result.stdout)
+
+    def test_each_install_step_runs_alone_in_a_fresh_home(self) -> None:
+        for step in EXPECTED_INSTALL_STEPS:
+            with self.subTest(step=step), tempfile.TemporaryDirectory() as temp:
+                root = pathlib.Path(temp)
+                _, env = self.create_valid_install_fixture(root)
+                result = subprocess.run(
+                    [str(ROOT / "install.sh"), step],
+                    cwd=ROOT,
+                    env=env,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+                self.assertEqual(
+                    tuple(
+                        line[3:]
+                        for line in result.stdout.splitlines()
+                        if line.startswith("== ")
+                    ),
+                    EXPECTED_INSTALL_BANNERS[step],
+                )
+
+    def test_install_skill_unlock_fails_when_every_requested_skill_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            home, env = self.create_valid_install_fixture(root)
+            unlock_names = tuple(
+                line
+                for line in (ROOT / "skills-unlock.txt").read_text().splitlines()
+                if line and not line.startswith("#")
+            )
+            for name in unlock_names:
+                shutil.rmtree(home / ".agents" / "skills" / name)
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "skill-unlock"],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("run the skills step first", result.stderr + result.stdout)
+
+    def test_install_skill_unlock_warns_when_some_requested_skills_are_missing(self) -> None:
+        for missing_names in (
+            ("wayfinder",),
+            ("wayfinder", "grill-with-docs"),
+        ):
+            with self.subTest(missing_names=missing_names):
+                with tempfile.TemporaryDirectory() as temp:
+                    root = pathlib.Path(temp)
+                    home, env = self.create_valid_install_fixture(root)
+                    for name in missing_names:
+                        shutil.rmtree(home / ".agents" / "skills" / name)
+
+                    result = subprocess.run(
+                        [str(ROOT / "install.sh"), "skill-unlock"],
+                        cwd=ROOT,
+                        env=env,
+                        text=True,
+                        capture_output=True,
+                        check=False,
+                    )
+
+                    self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+                    for name in missing_names:
+                        self.assertIn(f"skip {name}: not installed", result.stdout)
+
+    def test_install_rejects_unknown_step_and_prints_valid_names(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            _, env = self.create_valid_install_fixture(root)
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "not-a-real-step"],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            output = result.stderr + result.stdout
+            for step in EXPECTED_INSTALL_STEPS:
+                self.assertIn(step, output)
 
     def test_install_and_update_paths_share_unlock_command(self) -> None:
         install = (ROOT / "install.sh").read_text()
