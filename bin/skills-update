@@ -41,7 +41,7 @@ fi
 npx_rc=0
 if [ "$no_update" = false ] && [ "$restore_only" = false ]; then
   set +e
-  ( cd "$HOME" && "$NPX" skills update -g )
+  ( cd "$HOME" && "$NPX" --yes skills update -g )
   npx_rc=$?
   set -e
 fi

@@ -508,9 +508,9 @@ class SkillMetadataTest(unittest.TestCase):
 
         text = wrapper.read_text()
 
-        self.assertIn('"$NPX" skills update -g', text)
+        self.assertIn('"$NPX" --yes skills update -g', text)
         self.assertLess(text.index('skill_metadata.py" apply'), text.index('skill_metadata.py" check'))
-        self.assertLess(text.index('"$NPX" skills update -g'), text.index("restore_metadata )"))
+        self.assertLess(text.index('"$NPX" --yes skills update -g'), text.index("restore_metadata )"))
 
     def test_update_wrapper_restores_unlocks_after_fake_npx_update(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
@@ -530,8 +530,9 @@ class SkillMetadataTest(unittest.TestCase):
                 #!/usr/bin/env bash
                 set -euo pipefail
                 printf '%s\n' "$*" > "$HOME/npx.args"
-                [ "$1" = "skills" ]
-                [ "$2" = "update" ]
+                [ "$1" = "--yes" ]
+                [ "$2" = "skills" ]
+                [ "$3" = "update" ]
                 mkdir -p "$HOME/.agents/skills/wayfinder"
                 printf '%s\n' \\
                   '---' \\
@@ -561,7 +562,7 @@ class SkillMetadataTest(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertEqual((home / "npx.args").read_text(), "skills update -g\n")
+        self.assertEqual((home / "npx.args").read_text(), "--yes skills update -g\n")
         wayfinder = (shared / "wayfinder" / "SKILL.md").read_text()
         self.assertNotIn("disable-model-invocation: true", wayfinder)
         self.assertIn("name: wayfinder", wayfinder)
@@ -589,7 +590,7 @@ class SkillMetadataTest(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 23, result.stderr + result.stdout)
-        self.assertEqual((home / "npx.args").read_text(), "skills update -g\n")
+        self.assertEqual((home / "npx.args").read_text(), "--yes skills update -g\n")
         ponytail_review = (shared / "ponytail-review" / "SKILL.md").read_text()
         self.assertIn("Use only when the user explicitly names", ponytail_review)
         wayfinder = (shared / "wayfinder" / "SKILL.md").read_text()
@@ -974,8 +975,7 @@ class SkillMetadataTest(unittest.TestCase):
             self.assertEqual(original_result.returncode, 0, original_result.stderr)
             self.assertEqual(new_result.returncode, 0, new_result.stderr)
             self.assertEqual(
-                b"== preflight\n"
-                + self.normalize_home(original_result.stdout, original_home),
+                self.normalize_home(original_result.stdout, original_home),
                 self.normalize_home(new_result.stdout, new_home),
             )
             self.assertEqual(

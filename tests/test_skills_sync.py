@@ -562,6 +562,7 @@ class SkillsSyncTests(unittest.TestCase):
         npx.write_text(
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
+            '[ "$1" = --yes ] || { echo "npx --yes must precede the package" >&2; exit 64; }\n'
             'printf \'%s\\n\' "$*" > "$HOME/npx.args"\n'
             'mkdir -p "$HOME/.agents/skills/alpha"\n'
             "printf '%s\\n' '---' 'name: alpha' 'description: test' '---' "
@@ -579,7 +580,7 @@ class SkillsSyncTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual(
             (home / "npx.args").read_text(),
-            "skills add example/alpha --skill alpha -g -y\n",
+            "--yes skills add example/alpha --skill alpha -g -y\n",
         )
         self.assertTrue((home / ".agents" / "skills" / "alpha" / "SKILL.md").is_file())
 
@@ -597,11 +598,12 @@ class SkillsSyncTests(unittest.TestCase):
         npx.write_text(
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
-            'printf \'%s\\n\' "$5" >> "$HOME/attempts"\n'
-            'if [ "$5" = beta ]; then exit 7; fi\n'
-            'mkdir -p "$HOME/.agents/skills/$5"\n'
-            "printf '%s\\n' '---' \"name: $5\" 'description: test' '---' "
-            '> "$HOME/.agents/skills/$5/SKILL.md"\n'
+            '[ "$1" = --yes ] || exit 64\n'
+            'printf \'%s\\n\' "$6" >> "$HOME/attempts"\n'
+            'if [ "$6" = beta ]; then exit 7; fi\n'
+            'mkdir -p "$HOME/.agents/skills/$6"\n'
+            "printf '%s\\n' '---' \"name: $6\" 'description: test' '---' "
+            '> "$HOME/.agents/skills/$6/SKILL.md"\n'
         )
         npx.chmod(0o755)
 
@@ -800,7 +802,7 @@ class SkillsSyncTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertEqual((home / "npx.args").read_text(), "skills update -g\n")
+        self.assertEqual((home / "npx.args").read_text(), "--yes skills update -g\n")
 
 
 if __name__ == "__main__":

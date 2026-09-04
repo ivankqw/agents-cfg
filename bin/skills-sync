@@ -411,6 +411,7 @@ def install_missing(root: pathlib.Path) -> int:
                 f"install missing skill: {name} from {entry['source']}",
                 [
                     str(npx),
+                    "--yes",
                     "skills",
                     "add",
                     entry["source"],
