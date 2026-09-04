@@ -140,21 +140,29 @@ def main(argv: list[str]) -> int:
         ),
     )
     conflicts = [plan for plan in plans if plan.action == "conflict"]
-    for plan in conflicts:
-        assert plan.existing is not None
-        saved = backup(plan.path, plan.existing)
-        print(f"backup: {saved}")
-        show_diff(plan.path, plan.existing, plan.desired)
-    if conflicts and not args.force:
-        print("instruction files differ; examine the backups and diff, then use --force", file=sys.stderr)
-        return 1
-    for plan in plans:
+    ready = plans if args.force else tuple(plan for plan in plans if plan.action != "conflict")
+    for plan in ready:
+        if plan.action == "conflict":
+            assert plan.existing is not None
+            saved = backup(plan.path, plan.existing)
+            print(f"backup: {saved}")
+            show_diff(plan.path, plan.existing, plan.desired)
         if plan.action != "noop":
             replace(plan.path, plan.desired)
             print(f"managed: {plan.path}")
         recorded[plan.key] = file_digest(plan.desired)
-    write_state(state_path, recorded)
-    return 0
+        write_state(state_path, recorded)
+    if not args.force:
+        for plan in conflicts:
+            assert plan.existing is not None
+            saved = backup(plan.path, plan.existing)
+            print(f"backup: {saved}")
+            show_diff(plan.path, plan.existing, plan.desired)
+            print(
+                f"blocked instruction file: {plan.path}; examine the backup and diff, then use --force",
+                file=sys.stderr,
+            )
+    return 1 if conflicts and not args.force else 0
 
 
 if __name__ == "__main__":

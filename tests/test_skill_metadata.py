@@ -564,7 +564,32 @@ class SkillMetadataTest(unittest.TestCase):
             backups = tuple(home.glob("AGENTS.md.impstack-backup.*"))
             self.assertEqual(len(backups), 1)
             self.assertEqual(backups[0].read_bytes(), forged)
-            self.assertFalse((home / ".local/state/impstack/instructions.json").exists())
+            state = json.loads((home / ".local/state/impstack/instructions.json").read_text())
+            self.assertIn(".claude/CLAUDE.md", state["targets"])
+            self.assertNotIn("AGENTS.md", state["targets"])
+
+    def test_instruction_step_applies_clean_targets_when_another_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            private = root / "private"
+            private.mkdir()
+            private_agents = private / "AGENTS.md"
+            private_agents.write_text("private version one\n")
+            home, env = self.create_valid_install_fixture(root)
+            env["PRIVATE_CONFIG"] = str(private)
+            command = [str(ROOT / "install.sh"), "instructions"]
+            first = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True)
+            self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
+            claude = home / ".claude/CLAUDE.md"
+            claude.write_text("operator Claude edit\n")
+            private_agents.write_text("private version two\n")
+
+            result = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(claude.read_text(), "operator Claude edit\n")
+            self.assertIn("private version two", (home / "AGENTS.md").read_text())
+            self.assertIn(str(claude), result.stderr)
 
     def test_instruction_step_is_a_checked_noop_and_force_keeps_backup(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
