@@ -293,6 +293,11 @@ class SkillMetadataTest(unittest.TestCase):
             executable = fakebin / name
             executable.write_text(
                 "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                "if [ \"$1 $2\" = \"mcp get\" ]; then\n"
+                "  echo 'server not found' >&2\n"
+                "  exit 1\n"
+                "fi\n"
                 f"printf '%s\\n' \"$*\" >> \"$HOME/{name}-mcp.args\"\n"
             )
             executable.chmod(0o755)
@@ -424,6 +429,27 @@ class SkillMetadataTest(unittest.TestCase):
             self.assertIn("claude, codex, or opencode", rejected.stderr)
             self.assertEqual(allowed.returncode, 0, allowed.stderr + allowed.stdout)
             self.assertIn("detected harnesses: none (--no-harness)", allowed.stdout)
+
+    def test_mcp_reports_genuine_registration_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            _, env = self.create_valid_install_fixture(root)
+            (root / "bin" / "codex").unlink()
+            claude = root / "bin" / "claude"
+            claude.write_text(
+                "#!/usr/bin/env bash\n"
+                "if [ \"$1 $2\" = \"mcp get\" ]; then echo 'server not found' >&2; exit 1; fi\n"
+                "echo 'configuration write failed' >&2\n"
+                "exit 23\n"
+            )
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "mcp"], cwd=ROOT, env=env,
+                text=True, capture_output=True, check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("error context7 for Claude: configuration write failed", result.stderr)
 
     @staticmethod
     def normalize_home(value: str | bytes, home: pathlib.Path) -> str | bytes:
@@ -1012,7 +1038,7 @@ class SkillMetadataTest(unittest.TestCase):
         )
         self.assertNotIn("context7", codex_args)
         self.assertIn(
-            "skip context7 for Codex: header CONTEXT7_API_KEY is not bearer auth",
+            "unsupported context7 for Codex: header CONTEXT7_API_KEY is not bearer auth",
             result.stdout,
         )
 

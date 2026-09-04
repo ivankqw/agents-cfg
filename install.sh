@@ -254,34 +254,87 @@ if [ -f "$AC/mcp/servers.json" ]; then
   python3 - "$AC/mcp/servers.json" <<'PY'
 import json, os, shutil, subprocess, sys
 
+failed = False
+
+def output(result):
+    return (result.stderr or result.stdout or f"exit {result.returncode}").strip().splitlines()[-1]
+
+def present(command):
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode == 0:
+        return True
+    if "not found" in (result.stderr + result.stdout).lower():
+        return False
+    raise RuntimeError(output(result))
+
+def add(name, harness, command):
+    global failed
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode == 0:
+        print(f"  registered {name} for {harness}")
+        return
+    detail = output(result)
+    lowered = detail.lower()
+    if "already exists" in lowered or "already present" in lowered:
+        print(f"  already present {name} for {harness}")
+    elif "authentication required" in lowered or "unauthorized" in lowered:
+        print(f"  authentication required {name} for {harness}: {detail}")
+    else:
+        print(f"  error {name} for {harness}: {detail}", file=sys.stderr)
+        failed = True
+
+harnesses = [name for name in ("claude", "codex", "opencode") if shutil.which(name)]
 for s in json.load(open(sys.argv[1]))["servers"]:
     name = s["name"]
     url = os.environ.get(s["url_env"]) if "url_env" in s else s["url"]
-    if not url:
-        print(f"  skip {name}: ${s['url_env']} not set"); continue
     env = s.get("header_env")
-    if shutil.which("claude"):
+    for harness in harnesses:
+      label = {"claude": "Claude", "codex": "Codex", "opencode": "OpenCode"}[harness]
+      if not url:
+        print(f"  skipped {name} for {label}: ${s['url_env']} not set")
+        continue
+      if harness == "opencode":
+        print(f"  unsupported {name} for OpenCode: MCP add is interactive only")
+        continue
+      if harness == "claude":
         if env and not os.environ.get(env):
-            print(f"  skip {name} for Claude: ${env} not set")
+            print(f"  authentication required {name} for Claude: ${env} not set")
         else:
+            try:
+                if present(["claude", "mcp", "get", name]):
+                    print(f"  already present {name} for Claude")
+                    continue
+            except RuntimeError as error:
+                print(f"  error {name} for Claude: {error}", file=sys.stderr)
+                failed = True
+                continue
             cmd = ["claude", "mcp", "add", "--scope", "user", "--transport", "http", name, url]
             if env:
                 cmd += ["--header", f"{s['header_name']}: {os.environ[env]}"]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            state = "ok" if result.returncode == 0 else "exists/failed"
-            print(f"  {state} {name} for Claude")
-    if shutil.which("codex"):
+            add(name, "Claude", cmd)
+      elif harness == "codex":
         cmd = ["codex", "mcp", "add", name, "--url", url]
         if env:
             if s.get("header_name", "").lower() != "authorization":
                 print(
-                    f"  skip {name} for Codex: header {s['header_name']} is not bearer auth"
+                    f"  unsupported {name} for Codex: header {s['header_name']} is not bearer auth"
                 )
                 continue
+            if not os.environ.get(env):
+                print(f"  authentication required {name} for Codex: ${env} not set")
+                continue
             cmd += ["--bearer-token-env-var", env]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        state = "ok" if result.returncode == 0 else "exists/failed"
-        print(f"  {state} {name} for Codex")
+        try:
+            if present(["codex", "mcp", "get", name, "--json"]):
+                print(f"  already present {name} for Codex")
+                continue
+        except RuntimeError as error:
+            print(f"  error {name} for Codex: {error}", file=sys.stderr)
+            failed = True
+            continue
+        add(name, "Codex", cmd)
+if failed:
+    raise SystemExit(1)
 PY
 fi
 }
