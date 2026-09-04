@@ -28,7 +28,7 @@ list_install_steps() {
 }
 
 print_install_help() {
-  echo "usage: ./install.sh [--list|--help|<step>]"
+  echo "usage: ./install.sh [--no-harness] [--list|--help|<step>]"
   echo
   echo "A single step always runs preflight first."
   echo
@@ -45,28 +45,36 @@ run_install_step() {
 }
 
 selected_entry=""
-if [ "$#" -gt 1 ]; then
-  list_install_steps >&2
-  exit 2
-fi
-if [ "$#" -eq 1 ]; then
-  if [ "$1" = "--list" ]; then
+NO_HARNESS=false
+action=""
+for argument in "$@"; do
+  if [ "$argument" = "--no-harness" ]; then
+    NO_HARNESS=true
+  elif [ -n "$action" ]; then
+    print_install_help >&2
+    exit 2
+  else
+    action="$argument"
+  fi
+done
+if [ -n "$action" ]; then
+  if [ "$action" = "--list" ]; then
     list_install_steps
     exit 0
   fi
-  if [ "$1" = "--help" ]; then
+  if [ "$action" = "--help" ]; then
     print_install_help
     exit 0
   fi
   for entry in "${INSTALL_STEP_REGISTRY[@]}"; do
     IFS='|' read -r name banner function_name <<< "$entry"
-    if [ "$name" = "$1" ]; then
+    if [ "$name" = "$action" ]; then
       selected_entry="$entry"
       break
     fi
   done
   if [ -z "$selected_entry" ]; then
-    echo "unknown install step: $1" >&2
+    echo "unknown install step: $action" >&2
     list_install_steps >&2
     exit 2
   fi
@@ -80,6 +88,22 @@ done
 case "$(uname -s)" in Linux|Darwin) ;; *) echo "unsupported OS: $(uname -s)" >&2; exit 1;; esac
 "$AC/bin/skills-sync" resolve-node >/dev/null
 "$AC/bin/skills-sync" resolve-npx >/dev/null
+detected_harnesses=()
+for harness in claude codex opencode; do
+  command -v "$harness" >/dev/null && detected_harnesses+=("$harness")
+done
+if [ "${#detected_harnesses[@]}" -eq 0 ]; then
+  if [ "$NO_HARNESS" = true ]; then
+    echo "  detected harnesses: none (--no-harness)"
+  else
+    echo "missing harness: install claude, codex, or opencode; or pass --no-harness" >&2
+    exit 1
+  fi
+else
+  printf -v harness_list '%s, ' "${detected_harnesses[@]}"
+  harness_list="${harness_list%, }"
+  echo "  detected harnesses: $harness_list"
+fi
 PRIVATE="${PRIVATE_CONFIG:-$HOME/agents-cfg-private}"
 CLAUDE_DIR="$HOME/.claude"
 CODEX_DIR="$HOME/.codex"
@@ -376,13 +400,13 @@ install_step_validating_catalog() {
 "$AC/bin/skills-sync" check
 }
 
-if [ "$#" -eq 0 ]; then
+if [ -z "$action" ]; then
   for entry in "${INSTALL_STEP_REGISTRY[@]}"; do
     run_install_step "$entry"
   done
   echo "== done. Merge the settings templates by hand."
 else
-  if [ "$1" != "preflight" ]; then
+  if [ "$action" != "preflight" ]; then
     run_install_step "${INSTALL_STEP_REGISTRY[0]}"
   fi
   run_install_step "$selected_entry"

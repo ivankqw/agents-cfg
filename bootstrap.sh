@@ -59,7 +59,7 @@ python3 "$DEST/scripts/skill_metadata.py" preflight-pstack \
   "$PSTACK_DIR" "$DEST/pstack-revision.txt"
 
 set +e
-"$DEST/install.sh"
+"$DEST/install.sh" "$@"
 install_rc=$?
 set -e
 

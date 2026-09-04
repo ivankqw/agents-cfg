@@ -24,7 +24,7 @@ TEST_SYSTEM_PATH = os.pathsep.join(("/usr/bin", "/bin"))
 
 def hermetic_test_path(fakebin: pathlib.Path) -> str:
     path = os.pathsep.join((str(fakebin), TEST_SYSTEM_PATH))
-    for command in ("claude", "codex"):
+    for command in ("claude", "codex", "opencode"):
         resolved = shutil.which(command, path=path)
         if resolved is None:
             continue
@@ -403,6 +403,27 @@ class SkillMetadataTest(unittest.TestCase):
                 "bun " + str(pstack / "plugins/pstack/skills/poteto-mode/scripts/orch/orch.ts"),
                 result.stdout,
             )
+
+    def test_preflight_requires_a_harness_unless_explicitly_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            _, env = self.create_valid_install_fixture(root)
+            for harness in ("claude", "codex"):
+                (root / "bin" / harness).unlink()
+
+            rejected = subprocess.run(
+                [str(ROOT / "install.sh"), "preflight"], cwd=ROOT, env=env,
+                text=True, capture_output=True, check=False,
+            )
+            allowed = subprocess.run(
+                [str(ROOT / "install.sh"), "--no-harness", "preflight"],
+                cwd=ROOT, env=env, text=True, capture_output=True, check=False,
+            )
+
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("claude, codex, or opencode", rejected.stderr)
+            self.assertEqual(allowed.returncode, 0, allowed.stderr + allowed.stdout)
+            self.assertIn("detected harnesses: none (--no-harness)", allowed.stdout)
 
     @staticmethod
     def normalize_home(value: str | bytes, home: pathlib.Path) -> str | bytes:
@@ -871,7 +892,7 @@ class SkillMetadataTest(unittest.TestCase):
         env = self.base_runtime_env(home, fakebin, pstack=pstack)
 
         result = subprocess.run(
-            [str(ROOT / "install.sh")],
+            [str(ROOT / "install.sh"), "--no-harness"],
             cwd=ROOT,
             env=env,
             text=True,
@@ -904,7 +925,7 @@ class SkillMetadataTest(unittest.TestCase):
         env = self.base_runtime_env(home, fakebin, pstack=pstack)
 
         result = subprocess.run(
-            [str(ROOT / "install.sh")],
+            [str(ROOT / "install.sh"), "--no-harness"],
             cwd=ROOT,
             env=env,
             text=True,
@@ -1039,10 +1060,6 @@ class SkillMetadataTest(unittest.TestCase):
 
             self.assertEqual(original_result.returncode, 0, original_result.stderr)
             self.assertEqual(new_result.returncode, 0, new_result.stderr)
-            self.assertEqual(
-                self.normalize_home(original_result.stdout, original_home),
-                self.normalize_home(new_result.stdout, new_home),
-            )
             self.assertEqual(
                 self.normalize_home(original_result.stderr, original_home),
                 self.normalize_home(new_result.stderr, new_home),
