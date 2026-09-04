@@ -521,6 +521,52 @@ class SkillMetadataTest(unittest.TestCase):
             self.assertIn("write aborted", result.stderr)
             self.assertIn("after a panic", result.stderr)
 
+    def test_mcp_accepts_a_present_server_after_add_reports_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            _, env = self.create_valid_install_fixture(root)
+            (root / "bin/codex").unlink()
+            (root / "bin/claude").write_text(
+                "#!/usr/bin/env bash\n"
+                "marker=\"$HOME/claude-$3.registered\"\n"
+                "if [ \"$1 $2\" = \"mcp get\" ]; then test -f \"$marker\"; exit; fi\n"
+                "touch \"$HOME/claude-$7.registered\"\n"
+                "echo 'duplicate rejected' >&2\n"
+                "exit 23\n"
+            )
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "mcp"], cwd=ROOT, env=env,
+                text=True, capture_output=True, check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            self.assertIn("already present context7 for Claude", result.stdout)
+            self.assertNotIn("error context7", result.stderr)
+
+    def test_mcp_rejects_an_absent_server_after_add_reports_success(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            _, env = self.create_valid_install_fixture(root)
+            (root / "bin/codex").unlink()
+            (root / "bin/claude").write_text(
+                "#!/usr/bin/env bash\n"
+                "if [ \"$1 $2\" = \"mcp get\" ]; then exit 1; fi\n"
+                "exit 0\n"
+            )
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "mcp"], cwd=ROOT, env=env,
+                text=True, capture_output=True, check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "error context7 for Claude: registration command succeeded but the server is absent",
+                result.stderr,
+            )
+            self.assertNotIn("registered context7 for Claude", result.stdout)
+
     def test_install_propagates_explicit_skill_state_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)
