@@ -198,28 +198,24 @@ class BootstrapMigrationTests(unittest.TestCase):
         )
         self.assertFalse(any(command.startswith("clone ") and "pstack" in command for command in commands))
 
-    def test_pstack_fetch_distinguishes_missing_revision_from_transport_failure(self) -> None:
+    def test_pstack_fetch_failure_does_not_claim_an_unproven_cause(self) -> None:
         self.create_legacy_checkout()
-        for failure in ("missing-ref", "transport", "fetch-error"):
-            with self.subTest(failure=failure):
-                env = os.environ.copy()
-                env.update(
-                    HOME=str(self.home),
-                    PATH=f"{self.bin}:{os.defpath}",
-                    PSTACK_DIR=str(self.home / "pstack"),
-                    PRIVATE_CONFIG=str(self.home / "private"),
-                    FAKE_PSTACK_FETCH_FAILURE=failure,
-                )
-                result = subprocess.run(
-                    ["bash", str(SCRIPT)], cwd=ROOT, env=env,
-                    text=True, capture_output=True, check=False,
-                )
+        env = os.environ.copy()
+        env.update(
+            HOME=str(self.home),
+            PATH=f"{self.bin}:{os.defpath}",
+            PSTACK_DIR=str(self.home / "pstack"),
+            PRIVATE_CONFIG=str(self.home / "private"),
+            FAKE_PSTACK_FETCH_FAILURE="missing-ref",
+        )
 
-                self.assertNotEqual(result.returncode, 0)
-                if failure == "missing-ref":
-                    self.assertIn("pstack-revision.txt", result.stderr)
-                    self.assertNotIn("check network access", result.stderr)
-                else:
-                    expected = "network access" if failure == "transport" else "reachable remote"
-                    self.assertIn(expected, result.stderr)
-                    self.assertNotIn("pstack-revision.txt", result.stderr)
+        result = subprocess.run(
+            ["bash", str(SCRIPT)], cwd=ROOT, env=env,
+            text=True, capture_output=True, check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("could not fetch pinned pstack revision", result.stderr)
+        self.assertIn("may be missing", result.stderr)
+        self.assertIn("may restrict direct revision fetches", result.stderr)
+        self.assertIn(str(self.home / "impstack/pstack-revision.txt"), result.stderr)
