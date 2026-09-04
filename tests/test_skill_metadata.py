@@ -568,6 +568,23 @@ class SkillMetadataTest(unittest.TestCase):
             self.assertIn(".claude/CLAUDE.md", state["targets"])
             self.assertNotIn("AGENTS.md", state["targets"])
 
+    def test_instruction_step_recovers_when_state_is_lost_but_files_are_identical(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            home, env = self.create_valid_install_fixture(root)
+            command = [str(ROOT / "install.sh"), "instructions"]
+            first = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True)
+            self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
+            targets = (home / ".claude/CLAUDE.md", home / "AGENTS.md")
+            before = [(path.read_bytes(), path.stat().st_ino, path.stat().st_mtime_ns) for path in targets]
+            (home / ".local/state/impstack/instructions.json").unlink()
+
+            result = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            self.assertEqual(before, [(path.read_bytes(), path.stat().st_ino, path.stat().st_mtime_ns) for path in targets])
+            self.assertFalse(any(home.rglob("*.impstack-backup.*")))
+
     def test_instruction_step_applies_clean_targets_when_another_is_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)

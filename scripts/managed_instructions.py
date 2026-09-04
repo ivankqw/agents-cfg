@@ -39,9 +39,10 @@ def classify(key: str, path: pathlib.Path, desired: bytes, legacy: bytes, record
     if not path.exists():
         return Plan(key, path, desired, "replace", None)
     existing = path.read_bytes()
+    if existing == desired:
+        return Plan(key, path, desired, "noop", existing)
     if recorded == file_digest(existing):
-        action = "noop" if existing == desired else "replace"
-        return Plan(key, path, desired, action, existing)
+        return Plan(key, path, desired, "replace", existing)
     if existing == legacy:
         return Plan(key, path, desired, "replace", existing)
     return Plan(key, path, desired, "conflict", existing)
