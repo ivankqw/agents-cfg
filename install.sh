@@ -80,11 +80,6 @@ done
 case "$(uname -s)" in Linux|Darwin) ;; *) echo "unsupported OS: $(uname -s)" >&2; exit 1;; esac
 "$AC/bin/skills-sync" resolve-node >/dev/null
 "$AC/bin/skills-sync" resolve-npx >/dev/null
-if ! command -v bun >/dev/null; then
-  echo "  ! bun is missing; pstack watch-pr and orch are unavailable"
-  echo "  ! install bun from https://bun.sh, then re-run this install"
-fi
-
 PRIVATE="${PRIVATE_CONFIG:-$HOME/agents-cfg-private}"
 CLAUDE_DIR="$HOME/.claude"
 CODEX_DIR="$HOME/.codex"
@@ -96,6 +91,12 @@ python3 "$AC/scripts/skill_metadata.py" preflight-pstack "$PSTACK_DIR" "$AC/psta
 PSTACK_RESOLVED="$(cd "$PSTACK_DIR" && pwd -P)"
 PSTACK_SKILLS="$PSTACK_RESOLVED/plugins/pstack/skills"
 PSTACK_PROMPTS="$PSTACK_RESOLVED/plugins/pstack/.codex-plugin/prompts"
+if ! command -v bun >/dev/null; then
+  echo "  ! bun is missing; these commands will not work:"
+  echo "  ! $PSTACK_SKILLS/poteto-mode/scripts/watch-pr/watch-pr"
+  echo "  ! bun $PSTACK_SKILLS/poteto-mode/scripts/orch/orch.ts"
+  echo "  ! install bun from https://bun.sh, then re-run this install"
+fi
 
 mkdir -p "$CLAUDE_DIR"/{skills,agents,hooks} "$CODEX_DIR"/{hooks,prompts} "$SHARED_SKILLS" "$BIN"
 chmod 700 "$SHARED_SKILLS"

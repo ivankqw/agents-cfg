@@ -384,6 +384,26 @@ class SkillMetadataTest(unittest.TestCase):
                 self.assertIn(location, result.stderr)
             self.assertFalse((home / ".claude").exists())
 
+    def test_preflight_names_every_command_disabled_without_bun(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            home, env = self.create_valid_install_fixture(pathlib.Path(temp))
+
+            result = subprocess.run(
+                [str(ROOT / "install.sh"), "preflight"], cwd=ROOT, env=env,
+                text=True, capture_output=True, check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            pstack = pathlib.Path(env["PSTACK_DIR"]).resolve()
+            self.assertIn(
+                str(pstack / "plugins/pstack/skills/poteto-mode/scripts/watch-pr/watch-pr"),
+                result.stdout,
+            )
+            self.assertIn(
+                "bun " + str(pstack / "plugins/pstack/skills/poteto-mode/scripts/orch/orch.ts"),
+                result.stdout,
+            )
+
     @staticmethod
     def normalize_home(value: str | bytes, home: pathlib.Path) -> str | bytes:
         if isinstance(value, bytes):
